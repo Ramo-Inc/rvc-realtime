@@ -12,6 +12,10 @@ use crate::error::{Error, Result};
 /// Largest block the official VST sends to its worker (`WorkerClient.cpp` kMaxFrames).
 pub const MAX_BLOCK_FRAMES: usize = 131072;
 
+/// Largest context the pitch cache can ever cover (1024 frames of 10 ms, `rtrvc.RVC.cache_pitch`).
+/// The block and the crossfade come out of the same budget, so `Dims::compute` has the exact check.
+pub const MAX_EXTRA_MS: f64 = 10_000.0;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ModelFiles {
     pub contentvec: String,
@@ -57,7 +61,8 @@ pub enum F0Method {
     Fcpe,
 }
 
-/// Parameters fixed at engine start. Ranges are the official ones (`RVCRealtime.cpp` InitInt / InitDouble).
+/// Parameters fixed at engine start. Ranges are the official ones (`RVCRealtime.cpp` InitInt / InitDouble),
+/// except the context, which goes past the official sliders (VST 3 s, GUI 5 s) up to what the pitch cache holds.
 #[derive(Debug, Clone, Copy)]
 pub struct Startup {
     pub sample_rate: u32,
@@ -93,6 +98,7 @@ pub struct Dims {
     pub f0_max: f32,
     pub pitch_cache_len: usize,
     pub feats_frames: usize,
+    pub inter_channels: usize,
 }
 
 /// Python `float // float`: CPython float_floor_div (fmod based), not `(a / b).floor()`.
@@ -145,7 +151,7 @@ pub fn feats_frames(n16: usize) -> usize {
 impl Startup {
     pub fn validate(&self) -> Result<()> {
         let ranges = [("block_ms", self.block_ms, 20.0, 1000.0), ("crossfade_ms", self.crossfade_ms, 10.0, 100.0),
-                      ("extra_ms", self.extra_ms, 500.0, 3000.0), ("formant", self.formant, -12.0, 12.0)];
+                      ("extra_ms", self.extra_ms, 500.0, MAX_EXTRA_MS), ("formant", self.formant, -12.0, 12.0)];
         for (name, v, lo, hi) in ranges {
             if !(lo..=hi).contains(&v) {
                 return Err(Error::Startup(format!("{name} {v} is outside the official range {lo}..={hi}")));
@@ -179,6 +185,16 @@ impl Dims {
         let return_length = (block_frame + sola_buffer_frame + sola_search_frame) / zc;
         // rtrvc.RVC.infer
         let p_len = n16 / 160;
+        // rtrvc.infer reads the last p_len frames of the pitch cache, so everything the engine holds
+        // (context + crossfade + search + block) has to fit in it
+        if p_len > model.pitch_cache_len {
+            let over = (p_len - model.pitch_cache_len) * 10;
+            return Err(Error::Startup(format!(
+                "context, crossfade and block need {} ms of pitch history, {over} ms more than the {} ms the model keeps",
+                p_len * 10,
+                model.pitch_cache_len * 10
+            )));
+        }
         let mut f0_extractor_frame = block_frame_16k + 800;
         if s.f0 == F0Method::Rmvpe {
             f0_extractor_frame = 5120 * ((f0_extractor_frame - 1) / 5120 + 1) - 160;
@@ -208,6 +224,7 @@ impl Dims {
             f0_max: model.f0_max,
             pitch_cache_len: model.pitch_cache_len,
             feats_frames: feats_frames(n16),
+            inter_channels: model.inter_channels,
         })
     }
 }

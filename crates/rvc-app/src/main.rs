@@ -181,6 +181,9 @@ impl App {
         if s.voice_model.is_none() {
             return Some("オプションで声モデルを選んでください".into());
         }
+        if let Some(problem) = over_pitch_cache(s.block_ms, s.crossfade_ms, s.extra_ms) {
+            return Some(problem);
+        }
         match &self.check.lock().unwrap().1 {
             Check::Pending => Some("声モデルを確認しています…".into()),
             Check::Unsupported(reason) => Some(reason.clone()),
@@ -204,6 +207,8 @@ impl App {
             options: RealtimeOptions { engine: EngineOptions { runtime_dir: self.runtime_dir.clone(), seed: 1 } },
             pitch: voice.pitch,
             rms_mix: s.rms_mix,
+            threshold_db: s.threshold_db,
+            skip_silence: s.skip_silence,
             monitor_volume: s.monitor_volume as f32 / 100.0,
         });
     }
@@ -246,7 +251,13 @@ impl App {
             ui.add(egui::Label::new(egui::RichText::new(error).color(ui.visuals().error_fg_color)).wrap());
         } else if stage == Stage::Running {
             let ms = self.session.with_realtime(|rt| rt.infer_ms()).unwrap_or(0.0);
-            ui.label(format!("変換時間 {ms:.1} ms"));
+            let text = format!("変換時間 {ms:.1} ms");
+            // a block has to be converted within its own length, or the audio stream runs dry
+            if ms as f64 > self.settings.block_ms {
+                ui.colored_label(ui.visuals().error_fg_color, format!("{text}（ブロック長 {:.0} ms に間に合っていません）", self.settings.block_ms));
+            } else {
+                ui.label(text);
+            }
         } else if stage == Stage::Idle {
             if let Some(m) = missing {
                 ui.add(egui::Label::new(m).wrap());
@@ -356,6 +367,29 @@ impl App {
         }
 
         section_divider(ui, self.options_width);
+        ui.heading("声モデル");
+        ui.horizontal(|ui| {
+            let name = s.voice_model.as_ref().and_then(|p| p.file_name()).map_or("未選択".into(), |n| n.to_string_lossy().into_owned());
+            ui.label(name);
+            // the default setting always uses the bundled voice model
+            let fixed = s.active_preset == settings::DEFAULT_PRESET;
+            if ui.add_enabled(!fixed, egui::Button::new("選ぶ…")).clicked() {
+                if let Some(path) = rfd::FileDialog::new().add_filter("声モデル", &["pth", "safetensors"]).pick_file() {
+                    s.voice_model = Some(path);
+                    picked = true;
+                }
+            }
+            if fixed {
+                ui.weak("デフォルト変更不可、新規作成をしてください");
+            }
+        });
+        if let Check::Unsupported(reason) = &self.check.lock().unwrap().1 {
+            if s.voice_model.is_some() {
+                ui.colored_label(ui.visuals().error_fg_color, reason);
+            }
+        }
+
+        section_divider(ui, self.options_width);
         ui.heading("音声デバイス");
         egui::Grid::new("devices").num_columns(2).show(ui, |ui| {
             ui.label("入力デバイス");
@@ -381,29 +415,6 @@ impl App {
         });
 
         section_divider(ui, self.options_width);
-        ui.heading("声モデル");
-        ui.horizontal(|ui| {
-            let name = s.voice_model.as_ref().and_then(|p| p.file_name()).map_or("未選択".into(), |n| n.to_string_lossy().into_owned());
-            ui.label(name);
-            // the default setting always uses the bundled voice model
-            let fixed = s.active_preset == settings::DEFAULT_PRESET;
-            if ui.add_enabled(!fixed, egui::Button::new("選ぶ…")).clicked() {
-                if let Some(path) = rfd::FileDialog::new().add_filter("声モデル", &["pth", "safetensors"]).pick_file() {
-                    s.voice_model = Some(path);
-                    picked = true;
-                }
-            }
-            if fixed {
-                ui.weak("デフォルトでは変更できません");
-            }
-        });
-        if let Check::Unsupported(reason) = &self.check.lock().unwrap().1 {
-            if s.voice_model.is_some() {
-                ui.colored_label(ui.visuals().error_fg_color, reason);
-            }
-        }
-
-        section_divider(ui, self.options_width);
         ui.heading("声の調整");
         egui::Grid::new("voice").num_columns(2).show(ui, |ui| {
             if let Some(v) = s.voice() {
@@ -426,6 +437,22 @@ impl App {
         });
 
         section_divider(ui, self.options_width);
+        ui.heading("雑音");
+        egui::Grid::new("noise").num_columns(2).show(ui, |ui| {
+            ui.label("無音のしきい値");
+            ui.add(egui::Slider::new(&mut s.threshold_db, -60.0..=0.0).step_by(1.0).suffix(" dB"));
+            ui.end_row();
+            ui.label("");
+            ui.weak(if s.threshold_db <= -60.0 { "切（すべて変換します）" } else { "これより小さい音を無音とみなします" });
+            ui.end_row();
+            ui.label("");
+            ui.add_enabled_ui(s.threshold_db > -60.0, |ui| {
+                ui.checkbox(&mut s.skip_silence, "無音のときは変換しない（文脈にも入れない）");
+            });
+            ui.end_row();
+        });
+
+        section_divider(ui, self.options_width);
         ui.heading("性能");
         egui::Grid::new("perf").num_columns(2).show(ui, |ui| {
             ui.label("ブロック長");
@@ -435,13 +462,27 @@ impl App {
             ui.add(egui::Slider::new(&mut s.crossfade_ms, 10.0..=100.0).step_by(1.0).suffix(" ms"));
             ui.end_row();
             ui.label("文脈長");
-            ui.add(egui::Slider::new(&mut s.extra_ms, 500.0..=3000.0).step_by(10.0).suffix(" ms"));
+            ui.add(egui::Slider::new(&mut s.extra_ms, 500.0..=10000.0).step_by(10.0).suffix(" ms"));
             ui.end_row();
+            if let Some(problem) = over_pitch_cache(s.block_ms, s.crossfade_ms, s.extra_ms) {
+                ui.label("");
+                ui.colored_label(ui.visuals().error_fg_color, problem);
+                ui.end_row();
+            }
         });
         if picked {
             self.check_voice_model();
         }
     }
+}
+
+/// The engine keeps 1024 frames of 10 ms of pitch history; block, crossfade and context share it.
+fn over_pitch_cache(block_ms: f64, crossfade_ms: f64, extra_ms: f64) -> Option<String> {
+    const BUDGET_MS: f64 = 10_240.0;
+    let need = (block_ms + crossfade_ms + extra_ms + 10.0).ceil();
+    (need > BUDGET_MS).then(|| {
+        format!("ブロック長・クロスフェード・文脈長の合計が {need:.0} ms です。{BUDGET_MS:.0} ms までにしてください")
+    })
 }
 
 fn combo(ui: &mut egui::Ui, id: &str, value: &mut String, names: &[String]) {
@@ -581,9 +622,13 @@ impl eframe::App for App {
         // current start has finished
         if let Some(voice) = self.settings.voice().copied() {
             let (rms_mix, volume) = (self.settings.rms_mix, self.settings.monitor_volume as f32 / 100.0);
+            let (threshold, skip) = (self.settings.threshold_db, self.settings.skip_silence);
             self.session.with_realtime(|rt| {
                 rt.set_pitch(voice.pitch);
                 rt.set_rms_mix(rms_mix);
+                rt.set_threshold_db(threshold);
+                rt.set_skip_silence(skip);
+                rt.set_drop_silent_context(skip);
                 rt.set_monitor_volume(volume);
             });
         }

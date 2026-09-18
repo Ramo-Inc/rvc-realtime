@@ -33,9 +33,10 @@ It ports the realtime path of the official [RVC WebUI](https://github.com/RVC-Pr
 | 🎙️ **Realtime conversion** | One full-duplex WASAPI stream, converting inside the audio callback, as the official realtime GUI and VCClient do |
 | 🎁 **Works out of the box** | A redistributable default voice (MIT) is bundled and selected until you pick your own model |
 | 📦 **Use your model file as is** | `.pth` (official training output) and `.safetensors` load directly; they are converted in Rust in under a second on first start |
-| 🎚️ **Official parameters** | pitch, formant, rms_mix, RMVPE / FCPE, block / crossfade / extra lengths with the official ranges |
+| 🎚️ **Official parameters** | pitch, formant, rms_mix, RMVPE / FCPE, block / crossfade lengths with the official ranges, and context up to 10 s |
 | 🔁 **Change settings while running** | pitch, rms_mix and monitor volume apply instantly; everything else restarts the engine automatically |
-| 🎧 **Monitor output** | Hear yourself on a second device at its own volume, without changing what goes to Discord or OBS |
+| 🎧 **Monitor output** | Hear yourself on a second device at its own volume, without changing what goes to Discord or OBS. Its own clock is absorbed by a queue, so it does not click |
+| 🤫 **Idle on silence** | While nobody speaks, the models stop running: GPU usage drops to 0 %. The first loud block resumes at once |
 | 💾 **Named settings** | Save, overwrite, rename and delete whole configurations (devices, model, voice, performance) |
 | 🔊 **WASAPI exclusive** | The same option as the official GUI |
 | 🪶 **Small, simple UI** | A Start button and an Options window that sizes itself to its content |
@@ -180,7 +181,8 @@ Not decided yet.
 - **声モデルをそのまま使える:** `.pth` / `.safetensors` を選ぶだけです。初回のスタート時に、Rust で 1 秒未満で変換します。
 - **公式と同じパラメータ:** pitch、formant、rms_mix、RMVPE / FCPE、ブロック長・クロスフェード・文脈長。範囲も公式と同じです。
 - **変換中に設定を変えられる:** pitch・rms_mix・モニター音量はその場で反映します。それ以外は自動で作り直して再開します。
-- **モニター出力:** 配信や通話に送る音とは別に、自分の声を別のデバイスで、別の音量で聴けます。
+- **モニター出力:** 配信や通話に送る音とは別に、自分の声を別のデバイスで、別の音量で聴けます。機器ごとの時計のズレは待ち行列で吸収するので、プチ音が入りません。
+- **無音のときは変換しない:** 黙っている間はモデルを動かさず、GPU 使用率が 0% になります。声が出たらすぐ戻ります。
 - **名前付きの設定:** デバイス、声モデル、声の調整、性能をまとめて、保存・上書き・名前変更・削除できます。
 - **WASAPI 排他:** 公式 GUI と同じ選択肢です。
 - **シンプルな画面:** スタートとオプションだけです。オプション窓は中身に合わせた大きさで開きます。

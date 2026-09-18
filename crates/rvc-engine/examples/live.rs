@@ -45,6 +45,18 @@ struct Args {
     pitch: f32,
     #[arg(long, default_value_t = 0.5)]
     rms_mix: f32,
+    /// silence gate in dB; -60 and below is off (official GUI)
+    #[arg(long, default_value_t = -60.0, allow_hyphen_values = true)]
+    threshold_db: f32,
+    /// sweep the gate: raise the threshold by 1 dB per second while running (live-change check)
+    #[arg(long, default_value_t = false)]
+    sweep_threshold: bool,
+    /// do not convert while the input is below the threshold
+    #[arg(long, default_value_t = false)]
+    skip_silence: bool,
+    /// keep only speech in the context (silence never enters it)
+    #[arg(long, default_value_t = false)]
+    drop_silent_context: bool,
     #[arg(long, default_value_t = 1)]
     seed: u64,
 }
@@ -73,10 +85,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     rt.set_pitch(a.pitch);
     rt.set_rms_mix(a.rms_mix);
+    rt.set_threshold_db(a.threshold_db);
+    rt.set_drop_silent_context(a.drop_silent_context);
+    rt.set_skip_silence(a.skip_silence);
     rt.set_monitor_volume(a.monitor_volume);
     let t = Instant::now();
     loop {
+        if a.sweep_threshold {
+            rt.set_threshold_db(a.threshold_db + t.elapsed().as_secs_f32());
+        }
         println!("{:6.1}s {:?} infer_ms={:.2} {}", t.elapsed().as_secs_f64(), rt.status(), rt.infer_ms(), rt.status_text());
+        let (blocks, late, mon, starved, missing, dropped) = rt.stats();
+        let (overflow, underflow) = rt.glitches();
+        if blocks > 0 {
+            println!(
+                "       blocks={blocks} late={late} ({:.1}%) monitor_callbacks={mon} dry={starved} ({:.1}%) missing_samples={missing} dropped_samples={dropped} in_overflow={overflow} out_underflow={underflow}",
+                100.0 * late as f64 / blocks as f64,
+                100.0 * starved as f64 / mon.max(1) as f64
+            );
+        }
         if rt.status() == Status::Error || t.elapsed() >= Duration::from_secs(a.seconds) {
             break;
         }

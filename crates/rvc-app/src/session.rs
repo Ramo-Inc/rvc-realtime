@@ -23,6 +23,8 @@ pub struct Request {
     pub options: RealtimeOptions,
     pub pitch: f32,
     pub rms_mix: f32,
+    pub threshold_db: f32,
+    pub skip_silence: bool,
     pub monitor_volume: f32,
 }
 
@@ -116,6 +118,10 @@ fn run(inner: &Arc<Mutex<Inner>>, req: Request) -> Result<(), String> {
     let rt = Realtime::start(model_dir, req.startup, req.devices, req.options);
     rt.set_pitch(req.pitch);
     rt.set_rms_mix(req.rms_mix);
+    rt.set_threshold_db(req.threshold_db);
+    rt.set_skip_silence(req.skip_silence);
+    // the same switch keeps silence out of the engine's context (PoC: the two together)
+    rt.set_drop_silent_context(req.skip_silence);
     rt.set_monitor_volume(req.monitor_volume);
     let mut i = inner.lock().unwrap();
     i.stage = Stage::Loading;

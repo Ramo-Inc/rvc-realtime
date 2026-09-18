@@ -1,0 +1,12 @@
+# One line ending in the repository (LF). Windows tooling here — Rust, WiX, Python, uv — all read it.
+* text=auto eol=lf
+
+# written and read as bytes
+*.png binary
+*.ico binary
+*.wav binary
+*.onnx binary
+*.weights binary
+*.pth binary
+*.safetensors binary
+*.rtf -text

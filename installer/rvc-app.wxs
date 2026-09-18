@@ -2,13 +2,15 @@
   RVC Realtime installer (WiX Toolset 5).
   Build with WiX 5.0.2 (dotnet tool) from this folder, after assembling the payload in dist-work\stage
   (rvc-app.exe, ONNX Runtime provider DLLs, DirectML.dll, VC++ runtime DLLs, runtime\, assets\, THIRD_PARTY_NOTICES.txt):
-    wix build rvc-app.wxs -ext WixToolset.UI.wixext -culture ja-JP -bindpath Stage=../dist-work/stage -o ../dist/RVC-Realtime-0.1.3-alpha.msi
+    wix build rvc-app.wxs -ext WixToolset.UI.wixext -culture ja-JP -bindpath Stage=../dist-work/stage -o ../dist/RVC-Realtime-0.1.5-alpha.msi
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
-  <Package Name="RVC Realtime" Manufacturer="RVC Realtime" Version="0.1.3" Scope="perMachine"
+  <Package Name="RVC Realtime" Manufacturer="RVC Realtime" Version="0.1.5" Scope="perMachine"
            UpgradeCode="abc1243c-ca79-481b-bf17-22c8a491a6d6" Language="1041" Codepage="932">
     <SummaryInformation Description="RVC Realtime - realtime voice changer" Codepage="932" />
-    <MajorUpgrade DowngradeErrorMessage="新しいバージョンの RVC Realtime がすでにインストールされています。" />
+    <!-- An install over an existing one replaces it (same version included, so a rebuild reinstalls). -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="新しいバージョンの RVC Realtime がすでにインストールされています。" />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <Icon Id="AppIcon" SourceFile="icon/rvc-app.ico" />
@@ -27,6 +29,18 @@
       <Directory Id="INSTALLFOLDER" Name="RVC Realtime" />
     </StandardDirectory>
 
+    <!-- An update installs where the last install put it: the folder is remembered below, and read back
+         here before the wizard shows it. Installs made before 0.1.4 left no such value, so those are
+         asked once more. -->
+    <Property Id="INSTALLFOLDER">
+      <RegistrySearch Id="RememberedInstallFolder" Root="HKLM" Key="Software\RVC Realtime" Name="InstallFolder" Type="raw" />
+    </Property>
+    <Component Id="RememberInstallFolder" Directory="INSTALLFOLDER" Guid="*">
+      <RegistryValue Root="HKMU" Key="Software\RVC Realtime" Name="InstallFolder" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+    </Component>
+    <!-- so "変更" in the app list, and any tool that reads it, point at the same folder -->
+    <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" />
+
     <StandardDirectory Id="ProgramMenuFolder">
       <Component Id="StartMenuShortcut" Guid="*">
         <Shortcut Id="StartMenuApp" Name="RVC Realtime" Target="[INSTALLFOLDER]rvc-app.exe" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
@@ -43,6 +57,7 @@
     <Feature Id="Main" Title="RVC Realtime">
       <ComponentRef Id="StartMenuShortcut" />
       <ComponentRef Id="DesktopShortcut" />
+      <ComponentRef Id="RememberInstallFolder" />
       <Files Include="!(bindpath.Stage)\**" Directory="INSTALLFOLDER" />
     </Feature>
 

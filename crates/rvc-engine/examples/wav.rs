@@ -26,6 +26,15 @@ struct Args {
     pitch: f32,
     #[arg(long, default_value_t = 0.5)]
     rms_mix: f32,
+    /// silence gate in dB; -60 and below is off (official GUI)
+    #[arg(long, default_value_t = -60.0, allow_hyphen_values = true)]
+    threshold_db: f32,
+    /// do not convert while the input is below the threshold
+    #[arg(long, default_value_t = false)]
+    skip_silence: bool,
+    /// keep only speech in the context (silence never enters it)
+    #[arg(long, default_value_t = false)]
+    drop_silent_context: bool,
     #[arg(long, default_value_t = 1)]
     seed: u64,
     #[arg(long = "in")]
@@ -46,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let startup = Startup { sample_rate: spec.sample_rate, block_ms: a.block_ms, crossfade_ms: a.crossfade_ms, extra_ms: a.extra_ms, formant: a.formant, f0 };
     let model = Model::open(&a.model_dir)?;
     let mut engine = Engine::new(&model, &startup, &EngineOptions { runtime_dir: a.runtime_dir, seed: a.seed })?;
-    let params = Params { pitch: a.pitch, rms_mix: a.rms_mix };
+    let params = Params { pitch: a.pitch, rms_mix: a.rms_mix, threshold_db: a.threshold_db, drop_silent_context: a.drop_silent_context, skip_silence: a.skip_silence };
 
     let ch = spec.channels as usize;
     let raw: Vec<f32> = match spec.sample_format {

@@ -19,6 +19,10 @@ pub struct Settings {
     pub crossfade_ms: f64,
     pub extra_ms: f64,
     pub rms_mix: f32,
+    /// what counts as silence, in dB; -60 is off
+    pub threshold_db: f32,
+    /// do not convert while the input is silent (and keep silence out of the engine's context)
+    pub skip_silence: bool,
     /// percent
     pub monitor_volume: u32,
     /// pitch and formant per voice model file
@@ -53,6 +57,8 @@ pub struct Preset {
     pub pitch: f32,
     pub formant: f64,
     pub rms_mix: f32,
+    pub threshold_db: f32,
+    pub skip_silence: bool,
     pub f0: String,
     pub monitor_volume: u32,
     pub block_ms: f64,
@@ -80,6 +86,8 @@ impl Default for Settings {
             crossfade_ms: 80.0,
             extra_ms: 1000.0,
             rms_mix: 0.5,
+            threshold_db: -60.0,
+            skip_silence: true,
             monitor_volume: 50,
             voices: BTreeMap::new(),
             presets: Vec::new(),
@@ -196,6 +204,8 @@ impl Settings {
             pitch: voice.pitch,
             formant: voice.formant,
             rms_mix: self.rms_mix,
+            threshold_db: self.threshold_db,
+            skip_silence: self.skip_silence,
             f0: self.f0.clone(),
             monitor_volume: self.monitor_volume,
             block_ms: self.block_ms,
@@ -215,6 +225,8 @@ impl Settings {
             self.voices.insert(path.clone(), Voice { pitch: p.pitch, formant: p.formant });
         }
         self.rms_mix = p.rms_mix;
+        self.threshold_db = p.threshold_db;
+        self.skip_silence = p.skip_silence;
         self.f0 = p.f0.clone();
         self.monitor_volume = p.monitor_volume;
         self.block_ms = p.block_ms;

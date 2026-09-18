@@ -6,8 +6,11 @@ pub mod config;
 #[doc(hidden)]
 pub mod dsp;
 mod engine;
+#[doc(hidden)]
+pub mod noise;
 mod error;
 mod infer;
+mod monitor;
 mod portaudio;
 mod realtime;
 pub mod voice_model;
