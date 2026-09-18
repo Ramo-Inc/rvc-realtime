@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use rand::SeedableRng;
 use rand_distr::{Distribution, StandardNormal};
 
-use crate::config::{Dims, F0Method, Model, Setup, Startup};
+use crate::config::{Dims, F0Method, Model, Setup, Startup, Variant};
 use crate::dsp::{self, Resampler, Stft};
 use crate::error::{Error, Result};
 use crate::infer::{self, Models};
@@ -53,6 +53,7 @@ pub struct Params {
 pub struct Engine {
     d: Dims,
     fcpe: bool,
+    variant: Variant,
     upp: usize,
     formant: f32,
     models: Models,
@@ -107,6 +108,7 @@ impl Engine {
             .collect();
         let mut engine = Self {
             fcpe: startup.f0 == F0Method::Fcpe,
+            variant: startup.variant,
             upp: model.upp,
             formant: startup.formant as f32,
             models,
@@ -329,9 +331,9 @@ impl Engine {
         } else {
             let (mag, fr) = self.stft.rmvpe(x);
             let hidden = self.models.f0(&mag, fr)?;
-            dsp::rmvpe_decode(&hidden, fr, 0.03)
+            dsp::rmvpe_decode(&hidden, fr, self.variant.rmvpe_threshold)
         };
-        let (pitch, pitchf) = dsp::f0_post(f0, key, d.f0_min, d.f0_max);
+        let (pitch, pitchf) = dsp::f0_post(f0, key, d.f0_min, d.f0_max, self.variant.f0_interp);
         let cl = self.cache_pitch.len();
         let m = pitch.len() - 4;
         self.cache_pitch[cl - m..].copy_from_slice(&pitch[3..pitch.len() - 1]);

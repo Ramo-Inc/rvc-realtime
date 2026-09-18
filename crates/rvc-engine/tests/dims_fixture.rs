@@ -32,6 +32,7 @@ fn dims_match_official_engine() {
             extra_ms: c[3].as_f64().unwrap(),
             formant: c[4].as_f64().unwrap(),
             f0: if c[5].as_str().unwrap() == "rmvpe" { F0Method::Rmvpe } else { F0Method::Fcpe },
+            variant: Default::default(),
         };
         let d = Dims::compute(&model, &s).unwrap();
         let got = [d.zc, d.block_frame, d.block_frame_16k, d.crossfade_frame, d.sola_buffer_frame, d.sola_search_frame, d.extra_frame,
@@ -90,6 +91,7 @@ fn pitch_cache_limits_the_context() {
         extra_ms,
         formant: 0.0,
         f0: F0Method::Fcpe,
+        variant: Default::default(),
     };
     // 1024 frames of 10 ms, minus block, crossfade and the 10 ms SOLA search
     assert!(Dims::compute(&model, &startup(60.0, 80.0, 10_000.0)).is_ok());

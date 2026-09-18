@@ -61,6 +61,36 @@ pub enum F0Method {
     Fcpe,
 }
 
+/// How much of the 16 kHz buffer the F0 extractor reads each block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum F0Window {
+    /// the block plus 800 samples, RMVPE rounded up to 5120k - 160 (`rtrvc.RVC.infer`)
+    Official,
+    /// also the overlap SOLA crossfades and its search range, so the head of the output is re-estimated
+    /// every block instead of coming from the edge of the previous window (Deiteris VCClient)
+    Head,
+    /// the whole buffer: the pitch cache is re-estimated every block (Deiteris VCClient, `silenceFront` off)
+    Full,
+}
+
+/// Departures from the official 2.3 path, for comparing them (PoC). `Default` is the official path.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Variant {
+    /// fill unvoiced F0 frames by interpolation (official 2.3); off leaves them 0 (older official, VCClient)
+    pub f0_interp: bool,
+    /// RMVPE voicing threshold (official 0.03, Deiteris VCClient 0.05)
+    pub rmvpe_threshold: f32,
+    pub f0_window: F0Window,
+    /// crossfade the whole crossfade length instead of at most 40 ms (Deiteris VCClient)
+    pub full_crossfade: bool,
+}
+
+impl Default for Variant {
+    fn default() -> Self {
+        Self { f0_interp: true, rmvpe_threshold: 0.03, f0_window: F0Window::Official, full_crossfade: false }
+    }
+}
+
 /// Parameters fixed at engine start. Ranges are the official ones (`RVCRealtime.cpp` InitInt / InitDouble),
 /// except the context, which goes past the official sliders (VST 3 s, GUI 5 s) up to what the pitch cache holds.
 #[derive(Debug, Clone, Copy)]
@@ -71,6 +101,7 @@ pub struct Startup {
     pub extra_ms: f64,
     pub formant: f64,
     pub f0: F0Method,
+    pub variant: Variant,
 }
 
 #[derive(Debug, Clone)]
@@ -176,7 +207,7 @@ impl Dims {
         }
         let block_frame_16k = 160 * block_frame / zc;
         let crossfade_frame = ms_frames(s.crossfade_ms, sr, zc);
-        let sola_buffer_frame = crossfade_frame.min(4 * zc);
+        let sola_buffer_frame = if s.variant.full_crossfade { crossfade_frame } else { crossfade_frame.min(4 * zc) };
         let sola_search_frame = zc;
         let extra_frame = ms_frames(s.extra_ms, sr, zc);
         let input_wav_len = extra_frame + crossfade_frame + sola_search_frame + block_frame;
@@ -196,9 +227,13 @@ impl Dims {
             )));
         }
         let mut f0_extractor_frame = block_frame_16k + 800;
+        if s.variant.f0_window == F0Window::Head {
+            f0_extractor_frame += 160 * (sola_buffer_frame + sola_search_frame) / zc;
+        }
         if s.f0 == F0Method::Rmvpe {
             f0_extractor_frame = 5120 * ((f0_extractor_frame - 1) / 5120 + 1) - 160;
         }
+        f0_extractor_frame = if s.variant.f0_window == F0Window::Full { n16 } else { f0_extractor_frame.min(n16) };
         Ok(Self {
             device_sr: sr,
             model_sr: model.model_sr,

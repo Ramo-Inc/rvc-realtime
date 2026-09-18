@@ -229,11 +229,12 @@ pub fn rmvpe_decode(hidden: &[f32], frames: usize, thred: f32) -> Vec<f32> {
         .collect()
 }
 
-/// `rtrvc.get_f0_*` post-processing: fill unvoiced frames by `np.interp` over voiced ones, then
-/// shift by `key` semitones; returns (coarse pitch, f0) as in `rtrvc.get_f0_post`.
-pub fn f0_post(mut f0: Vec<f32>, key: f32, f0_min: f32, f0_max: f32) -> (Vec<i64>, Vec<f32>) {
+/// `rtrvc.get_f0_*` post-processing: fill unvoiced frames by `np.interp` over voiced ones (when
+/// `interp`; the older official code left them 0), then shift by `key` semitones; returns
+/// (coarse pitch, f0) as in `rtrvc.get_f0_post`.
+pub fn f0_post(mut f0: Vec<f32>, key: f32, f0_min: f32, f0_max: f32, interp: bool) -> (Vec<i64>, Vec<f32>) {
     let voiced: Vec<usize> = (0..f0.len()).filter(|&i| f0[i] != 0.0).collect();
-    if !voiced.is_empty() {
+    if interp && !voiced.is_empty() {
         let xs: Vec<f64> = voiced.iter().map(|&i| i as f64).collect();
         let ys: Vec<f64> = voiced.iter().map(|&i| f0[i] as f64).collect();
         for i in 0..f0.len() {

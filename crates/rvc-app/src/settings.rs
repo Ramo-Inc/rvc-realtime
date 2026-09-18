@@ -35,7 +35,13 @@ pub struct Settings {
     /// the bundled voice model; the default preset always uses it
     #[serde(skip)]
     pub default_voice: PathBuf,
+    /// which defaults the default preset was last brought up to (see `DEFAULTS_VERSION`)
+    pub defaults_version: u32,
 }
+
+/// 1: FCPE, crossfade 80 ms, rms_mix 0.5 (up to 0.1.5). 2: RMVPE, crossfade 100 ms, rms_mix 1.0 (0.1.6,
+/// with the Deiteris VCClient F0 handling in `main.rs`).
+const DEFAULTS_VERSION: u32 = 2;
 
 /// Reads `null` as an empty string (earlier settings files stored no active preset as `null`).
 fn null_as_empty<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
@@ -73,7 +79,7 @@ pub struct Voice {
 }
 
 impl Default for Settings {
-    /// lowlat-fcpe
+    /// block 60 ms and context 1000 ms (lowlat), RMVPE, the whole 100 ms crossfaded, rms_mix off
     fn default() -> Self {
         Self {
             input: String::new(),
@@ -81,11 +87,11 @@ impl Default for Settings {
             monitor: None,
             exclusive: false,
             voice_model: None,
-            f0: "fcpe".into(),
+            f0: "rmvpe".into(),
             block_ms: 60.0,
-            crossfade_ms: 80.0,
+            crossfade_ms: 100.0,
             extra_ms: 1000.0,
-            rms_mix: 0.5,
+            rms_mix: 1.0,
             threshold_db: -60.0,
             skip_silence: true,
             monitor_volume: 50,
@@ -93,6 +99,8 @@ impl Default for Settings {
             presets: Vec::new(),
             active_preset: DEFAULT_PRESET.into(),
             default_voice: PathBuf::new(),
+            // a file without the field predates the versions
+            defaults_version: 0,
         }
     }
 }
@@ -127,9 +135,17 @@ impl Settings {
             s.presets.insert(0, default);
         }
         let voice = Some(s.default_voice.clone());
+        let fresh = Settings::default();
         if let Some(p) = s.presets.iter_mut().find(|p| p.name == DEFAULT_PRESET) {
             p.voice_model = voice;
+            // new defaults reach the default preset only where it still holds the old ones untouched
+            if s.defaults_version < DEFAULTS_VERSION && p.f0 == "fcpe" && p.crossfade_ms == 80.0 && p.rms_mix == 0.5 {
+                p.f0 = fresh.f0.clone();
+                p.crossfade_ms = fresh.crossfade_ms;
+                p.rms_mix = fresh.rms_mix;
+            }
         }
+        s.defaults_version = DEFAULTS_VERSION;
         // open on exactly what the default preset saved
         if s.active_preset == DEFAULT_PRESET {
             if let Some(p) = s.presets.iter().find(|p| p.name == DEFAULT_PRESET).cloned() {

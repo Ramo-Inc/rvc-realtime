@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use eframe::egui;
 use rvc_engine::voice_model::{self, Unsupported};
-use rvc_engine::{list_devices, DeviceList, Devices, EngineOptions, Error, F0Method, RealtimeOptions, Startup};
+use rvc_engine::{list_devices, DeviceList, Devices, EngineOptions, Error, F0Method, F0Window, RealtimeOptions, Startup, Variant};
 use session::{Request, Session, Stage};
 use settings::Settings;
 
@@ -28,6 +28,11 @@ const RUNNING_COLOR: egui::Color32 = egui::Color32::from_rgb(128, 52, 52);
 const DIVIDER_SPACE: f32 = 12.0;
 /// Width of the device and preset dropdowns.
 const DEVICE_COMBO_WIDTH: f32 = 300.0;
+
+/// The F0 handling of the Deiteris VCClient instead of the official 2.3 path: unvoiced frames stay unvoiced,
+/// RMVPE voicing threshold 0.05, the crossfaded head re-estimated, the whole crossfade overlapped.
+/// Measured against the official path with every sound-quality candidate on (`deiteris_all`).
+const APP_VARIANT: Variant = Variant { f0_interp: false, rmvpe_threshold: 0.05, f0_window: F0Window::Head, full_crossfade: true };
 
 fn main() -> eframe::Result {
     // each window's size follows its content every frame (main window; options in its own window)
@@ -202,7 +207,7 @@ impl App {
             voice_model,
             assets_dir: self.assets_dir.clone(),
             models_dir: settings::models_dir(),
-            startup: Startup { sample_rate, block_ms: s.block_ms, crossfade_ms: s.crossfade_ms, extra_ms: s.extra_ms, formant: voice.formant, f0 },
+            startup: Startup { sample_rate, block_ms: s.block_ms, crossfade_ms: s.crossfade_ms, extra_ms: s.extra_ms, formant: voice.formant, f0, variant: APP_VARIANT },
             devices: Devices { input: s.input, output: s.output, monitor: s.monitor, wasapi_exclusive: s.exclusive },
             options: RealtimeOptions { engine: EngineOptions { runtime_dir: self.runtime_dir.clone(), seed: 1 } },
             pitch: voice.pitch,

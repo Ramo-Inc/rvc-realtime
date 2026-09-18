@@ -76,7 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "fcpe" => F0Method::Fcpe,
         other => return Err(format!("unknown f0 method {other}").into()),
     };
-    let startup = Startup { sample_rate: a.sample_rate, block_ms: a.block_ms, crossfade_ms: a.crossfade_ms, extra_ms: a.extra_ms, formant: a.formant, f0 };
+    let startup = Startup { sample_rate: a.sample_rate, block_ms: a.block_ms, crossfade_ms: a.crossfade_ms, extra_ms: a.extra_ms, formant: a.formant, f0, variant: Default::default() };
     let rt = Realtime::start(
         a.model_dir,
         startup,

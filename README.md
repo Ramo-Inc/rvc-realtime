@@ -33,6 +33,7 @@ It ports the realtime path of the official [RVC WebUI](https://github.com/RVC-Pr
 | 🎙️ **Realtime conversion** | One full-duplex WASAPI stream, converting inside the audio callback, as the official realtime GUI and VCClient do |
 | 🎁 **Works out of the box** | A redistributable default voice (MIT) is bundled and selected until you pick your own model |
 | 📦 **Use your model file as is** | `.pth` (official training output) and `.safetensors` load directly; they are converted in Rust in under a second on first start |
+| 🗣️ **Breath stays breath** | Unvoiced frames (breath, consonants, room noise) stay unvoiced instead of being given the neighbouring pitch, as in the older official code and the Deiteris VCClient fork |
 | 🎚️ **Official parameters** | pitch, formant, rms_mix, RMVPE / FCPE, block / crossfade lengths with the official ranges, and context up to 10 s |
 | 🔁 **Change settings while running** | pitch, rms_mix, the silence settings and monitor volume apply instantly; everything else restarts the engine automatically |
 | 🎧 **Monitor output** | Hear yourself on a second device at its own volume, without changing what goes to Discord or OBS. Its own clock is absorbed by a queue, so it does not click |
@@ -43,7 +44,7 @@ It ports the realtime path of the official [RVC WebUI](https://github.com/RVC-Pr
 
 ## Numbers
 
-Measured on an RTX 3060 Ti with the `lowlat-fcpe` configuration (block 60 ms, crossfade 80 ms, context 1000 ms, FCPE, 48 kHz device).
+Measured on an RTX 3060 Ti with the `lowlat-fcpe` configuration (block 60 ms, crossfade 80 ms, context 1000 ms, FCPE, 48 kHz device), the default up to 0.1.5. The 0.1.6 default (RMVPE) takes about 19 ms per block back-to-back.
 
 | What | Result |
 |---|---|
@@ -187,6 +188,7 @@ Windows 用のインストーラー（`RVC-Realtime-<バージョン>-alpha.msi`
 
 - **すぐ試せる:** 再配布できる既定の声モデル（MIT）が入っていて、自分のモデルを選ぶまではそれが使われます。
 - **声モデルをそのまま使える:** `.pth` / `.safetensors` を選ぶだけです。初回のスタート時に、Rust で 1 秒未満で変換します。
+- **息は息のまま:** 息・子音・部屋の雑音を、前後の声の高さで埋めずに無声のまま変換します（旧版の公式と Deiteris 版 VCClient と同じ）。
 - **公式と同じパラメータ:** pitch、formant、rms_mix、RMVPE / FCPE、ブロック長・クロスフェード・文脈長。範囲も公式と同じです。
 - **変換中に設定を変えられる:** pitch・rms_mix・無音の設定・モニター音量はその場で反映します。それ以外は自動で作り直して再開します。
 - **モニター出力:** 配信や通話に送る音とは別に、自分の声を別のデバイスで、別の音量で聴けます。機器ごとの時計のズレは待ち行列で吸収するので、プチ音が入りません。
