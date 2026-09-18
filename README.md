@@ -34,7 +34,7 @@ It ports the realtime path of the official [RVC WebUI](https://github.com/RVC-Pr
 | 🎁 **Works out of the box** | A redistributable default voice (MIT) is bundled and selected until you pick your own model |
 | 📦 **Use your model file as is** | `.pth` (official training output) and `.safetensors` load directly; they are converted in Rust in under a second on first start |
 | 🎚️ **Official parameters** | pitch, formant, rms_mix, RMVPE / FCPE, block / crossfade lengths with the official ranges, and context up to 10 s |
-| 🔁 **Change settings while running** | pitch, rms_mix and monitor volume apply instantly; everything else restarts the engine automatically |
+| 🔁 **Change settings while running** | pitch, rms_mix, the silence settings and monitor volume apply instantly; everything else restarts the engine automatically |
 | 🎧 **Monitor output** | Hear yourself on a second device at its own volume, without changing what goes to Discord or OBS. Its own clock is absorbed by a queue, so it does not click |
 | 🤫 **Idle on silence** | While nobody speaks, the models stop running: GPU usage drops to 0 %. The first loud block resumes at once |
 | 💾 **Named settings** | Save, overwrite, rename and delete whole configurations (devices, model, voice, performance) |
@@ -95,6 +95,10 @@ flowchart LR
   - 32k and 48k are verified against torch with random weights.
 - ❌ Not supported yet: RVC v1, models without F0, index files, noise suppression, CPU / AMD / Intel GPUs, macOS / Linux.
 - 📦 The runtime DLLs and ONNX assets are not in this repository. Building from source needs the dev tools below.
+
+## Download
+
+The Windows installer (`RVC-Realtime-<version>-alpha.msi`) is on the [Releases](https://github.com/Ramo-Inc/rvc-realtime/releases) page. It bundles CUDA, cuDNN and ONNX Runtime; you only need an NVIDIA GPU with a driver that supports CUDA 13. Installing a newer version updates the existing install in place.
 
 ## Build from source
 
@@ -175,12 +179,16 @@ Not decided yet.
 
 公式 RVC WebUI 2.3.260718 のリアルタイム変換を 1 行ずつ移植しました。ONNX Runtime と CUDA Graph で動かし、公式の Python と段階ごとに照合しています。
 
+### ダウンロード
+
+Windows 用のインストーラー（`RVC-Realtime-<バージョン>-alpha.msi`）は [Releases](https://github.com/Ramo-Inc/rvc-realtime/releases) にあります。CUDA・cuDNN・ONNX Runtime は同梱しているので、必要なのは CUDA 13 対応ドライバーの NVIDIA GPU だけです。新しい版を入れると、前の版のフォルダがそのまま更新されます。
+
 ### できること
 
 - **すぐ試せる:** 再配布できる既定の声モデル（MIT）が入っていて、自分のモデルを選ぶまではそれが使われます。
 - **声モデルをそのまま使える:** `.pth` / `.safetensors` を選ぶだけです。初回のスタート時に、Rust で 1 秒未満で変換します。
 - **公式と同じパラメータ:** pitch、formant、rms_mix、RMVPE / FCPE、ブロック長・クロスフェード・文脈長。範囲も公式と同じです。
-- **変換中に設定を変えられる:** pitch・rms_mix・モニター音量はその場で反映します。それ以外は自動で作り直して再開します。
+- **変換中に設定を変えられる:** pitch・rms_mix・無音の設定・モニター音量はその場で反映します。それ以外は自動で作り直して再開します。
 - **モニター出力:** 配信や通話に送る音とは別に、自分の声を別のデバイスで、別の音量で聴けます。機器ごとの時計のズレは待ち行列で吸収するので、プチ音が入りません。
 - **無音のときは変換しない:** 黙っている間はモデルを動かさず、GPU 使用率が 0% になります。声が出たらすぐ戻ります。
 - **名前付きの設定:** デバイス、声モデル、声の調整、性能をまとめて、保存・上書き・名前変更・削除できます。
