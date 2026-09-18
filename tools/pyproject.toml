@@ -1,0 +1,35 @@
+[project]
+name = "rvc-poc-tools"
+version = "0.1.0"
+description = "Dev tools: ONNX export from the official RVC code, runtime DLL download, test fixtures"
+requires-python = ">=3.12,<3.13"
+# Versions follow the official RVC 2.3.260718 requirments_cu128_py312.txt
+dependencies = [
+    "torch==2.7.1",
+    "torchaudio==2.7.1",
+    "numpy>=1.26.4,<2",
+    "librosa>=0.10.2,<0.11",
+    "faiss-cpu>=1.13.0,<2",
+    "praat-parselmouth>=0.4.5,<1",
+    "soundfile>=0.13.0,<1",
+    "scipy>=1.13.1,<2",
+    "torchfcpe>=0.0.4,<0.1",
+    "transformers>=4.49.0,<4.50",
+    "safetensors",
+    "matplotlib>=3.8.2,<4",
+    "onnx>=1.17,<1.19",
+    "onnxruntime-gpu>=1.19.2,<1.20",
+    "onnxslim>=0.1.96",
+]
+
+[tool.uv]
+package = false
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchaudio = { index = "pytorch-cu128" }

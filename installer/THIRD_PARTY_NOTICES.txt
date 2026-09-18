@@ -1,0 +1,43 @@
+RVC Realtime - third-party components
+=====================================
+
+This installer contains the following third-party components. Each is used only by RVC Realtime.
+
+NVIDIA CUDA Toolkit 13 runtime libraries (runtime\cudart64_13.dll, cublas64_13.dll, cublasLt64_13.dll)
+  Redistributed under the NVIDIA CUDA Toolkit End User License Agreement (Attachment A).
+  https://docs.nvidia.com/cuda/eula/index.html
+  This software contains source code provided by NVIDIA Corporation.
+
+NVIDIA cuDNN 9 runtime libraries (runtime\cudnn*64_9.dll)
+  Redistributed under the NVIDIA cuDNN Software License Agreement.
+  https://docs.nvidia.com/deeplearning/cudnn/latest/reference/eula.html
+
+ONNX Runtime (onnxruntime_providers_cuda.dll, onnxruntime_providers_shared.dll; the core is linked into rvc-app.exe)
+  MIT License, Copyright (c) Microsoft Corporation.
+  https://github.com/microsoft/onnxruntime
+
+Microsoft Visual C++ Redistributable (msvcp140.dll, msvcp140_1.dll, vcruntime140.dll, vcruntime140_1.dll)
+  Redistributable Code under the Microsoft Visual Studio license terms (app-local deployment).
+  https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files
+
+DirectML (DirectML.dll, shipped with ONNX Runtime)
+  Microsoft DirectML redistributable, https://www.nuget.org/packages/Microsoft.AI.DirectML
+
+PortAudio (runtime\libportaudio64bit.dll, from python-sounddevice 0.5.6)
+  MIT-style license, Copyright (c) 1999-2011 Ross Bencina and Phil Burk.
+  http://www.portaudio.com/license.html
+
+RVC WebUI (the algorithm and the models exported from it: assets\*.onnx, assets\templates)
+  MIT License, Copyright (c) 2023 liujing04, 源文雨, Ftps.
+  https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI
+  ContentVec: MIT License, https://github.com/auspicious3000/contentvec
+  RMVPE: https://github.com/Dream-High/RMVPE
+  FCPE (torchfcpe): MIT License, https://github.com/CNChTu/FCPE
+
+Default voice model (assets\voices\default_v2_40k.pth)
+  PhoenixStormJr / RVC-V2-default-voice, MIT License.
+  https://huggingface.co/PhoenixStormJr/RVC-V2-default-voice
+  The full license text is in assets\voices\default_v2_40k.LICENSE.txt.
+
+egui / eframe, rfd, serde, sha2, zip, safetensors and the other Rust crates linked into rvc-app.exe
+  MIT or Apache-2.0 licenses.

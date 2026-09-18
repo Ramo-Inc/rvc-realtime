@@ -1,0 +1,11 @@
+# build output
+target/
+__pycache__/
+.venv/
+
+# large binaries made or downloaded by the steps in README.md: models, ONNX, runtime DLLs, official clone
+assets/
+
+# installer build output
+dist-work/
+dist/

@@ -1,0 +1,12 @@
+{
+  "id": "base",
+  "device_sr": 48000,
+  "block_ms": 130,
+  "crossfade_ms": 80,
+  "extra_ms": 2000,
+  "f0": "rmvpe",
+  "pitch": 14,
+  "formant": -0.2,
+  "rms_mix": 0.5,
+  "threshold_db": -60
+}

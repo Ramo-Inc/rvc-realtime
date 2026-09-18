@@ -1,0 +1,27 @@
+[package]
+name = "rvc-engine"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Realtime RVC voice conversion engine (official RVC 2.3.260718 realtime algorithm on ONNX Runtime)"
+
+[dependencies]
+# ort rc.13 downloads ONNX Runtime 1.28 (CUDA 13 build on Windows).
+ort = { version = "=2.0.0-rc.13", features = ["cuda", "half"] }
+half = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+realfft = "3.5"
+rand = "0.9"
+rand_distr = "0.5"
+libloading = "0.8"
+# voice model conversion: .safetensors and torch .pth (stored zip)
+safetensors = "0.6"
+zip = { version = "2", default-features = false }
+
+[dev-dependencies]
+clap = { version = "4.5", features = ["derive"] }
+hound = "3.5"
+
+[profile.release]
+debug = false
