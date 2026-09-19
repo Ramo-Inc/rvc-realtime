@@ -1,0 +1,11 @@
+[package]
+name = "rvc-model"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+half = "2"
+serde_json = "1"
+safetensors = "0.6"
+zip = { version = "2", default-features = false }

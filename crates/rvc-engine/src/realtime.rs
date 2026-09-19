@@ -10,8 +10,9 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
-use crate::config::{Model, Startup};
-use crate::engine::{Engine, EngineOptions, Params};
+use crate::config::Startup;
+use crate::processor::{Conversion, Processor};
+use crate::engine::{EngineOptions, Params};
 use crate::error::{Error, Result};
 use crate::monitor::MonitorBuffer;
 use crate::portaudio::{PaStream, PortAudio, PA_ABORT, PA_CONTINUE};
@@ -96,7 +97,7 @@ impl Shared {
 
 /// State owned by the stream callback.
 struct CallbackState {
-    engine: Engine,
+    engine: Processor,
     /// how long one block lasts, in seconds: conversion has to stay inside it
     block_seconds: f64,
     shared: Arc<Shared>,
@@ -145,15 +146,21 @@ pub struct Realtime {
 impl Realtime {
     /// Returns at once; loads the model and opens the stream on a background thread.
     pub fn start(model_dir: PathBuf, startup: Startup, devices: Devices, opts: RealtimeOptions) -> Realtime {
+        Self::start_configured(Conversion::Legacy { model_dir, startup }, devices, opts,
+            Params { pitch: 12.0, rms_mix: 0.5, threshold_db: -60.0, drop_silent_context: false, skip_silence: false }, 1.0)
+    }
+
+    /// Initial live values are installed before the first callback, including during model loading.
+    pub fn start_configured(conversion: Conversion, devices: Devices, opts: RealtimeOptions, initial: Params, monitor_volume: f32) -> Realtime {
         let shared = Arc::new(Shared {
             status: AtomicU8::new(Status::Loading as u8),
             status_text: Mutex::new("loading".into()),
-            pitch: AtomicU32::new(12f32.to_bits()),
-            rms_mix: AtomicU32::new(0.5f32.to_bits()),
-            threshold_db: AtomicU32::new((-60f32).to_bits()),
-            drop_silent_context: AtomicBool::new(false),
-            skip_silence: AtomicBool::new(false),
-            monitor_volume: AtomicU32::new(1f32.to_bits()),
+            pitch: AtomicU32::new(initial.pitch.to_bits()),
+            rms_mix: AtomicU32::new(initial.rms_mix.to_bits()),
+            threshold_db: AtomicU32::new(initial.threshold_db.to_bits()),
+            drop_silent_context: AtomicBool::new(initial.drop_silent_context),
+            skip_silence: AtomicBool::new(initial.skip_silence),
+            monitor_volume: AtomicU32::new(monitor_volume.clamp(0.0, 1.0).to_bits()),
             infer_ms: AtomicU32::new(0f32.to_bits()),
             epoch: Instant::now(),
             last_callback_ms: AtomicU64::new(0),
@@ -166,13 +173,14 @@ impl Realtime {
             output_underflow: AtomicU64::new(0),
         });
         let s = shared.clone();
-        let loader = std::thread::spawn(move || match load(&model_dir, &startup, &devices, &opts, &s) {
+        let loader = std::thread::spawn(move || match load(conversion, &devices, &opts, &s) {
             Ok(running) => {
                 if let Ok(mut t) = s.status_text.lock() {
                     *t = "running".into();
                 }
                 s.last_callback_ms.store(s.epoch.elapsed().as_millis() as u64, Ordering::Relaxed);
-                s.status.store(Status::Running as u8, Ordering::Relaxed);
+                // A callback may already have failed during Pa_StartStream.
+                let _ = s.status.compare_exchange(Status::Loading as u8, Status::Running as u8, Ordering::Relaxed, Ordering::Relaxed);
                 Some(running)
             }
             Err(e) => {
@@ -237,6 +245,11 @@ impl Realtime {
         f32::from_bits(self.shared.infer_ms.load(Ordering::Relaxed))
     }
 
+    /// Closes streams and joins the inference owner; counters remain readable afterward.
+    pub fn stop(&mut self) {
+        if let Some(handle) = self.loader.take() { drop(handle.join()); }
+    }
+
     /// Callbacks PortAudio flagged: (input overflow, output underflow).
     pub fn glitches(&self) -> (u64, u64) {
         let s = &self.shared;
@@ -262,15 +275,13 @@ impl Realtime {
 impl Drop for Realtime {
     fn drop(&mut self) {
         // Waits for a load in progress; dropping `Running` closes the stream, then frees the engine.
-        if let Some(handle) = self.loader.take() {
-            drop(handle.join());
-        }
+        self.stop();
     }
 }
 
-fn load(model_dir: &Path, startup: &Startup, devices: &Devices, opts: &RealtimeOptions, shared: &Arc<Shared>) -> Result<Running> {
-    let model = Model::open(model_dir)?;
-    let engine = Engine::new(&model, startup, &opts.engine)?;
+fn load(conversion: Conversion, devices: &Devices, opts: &RealtimeOptions, shared: &Arc<Shared>) -> Result<Running> {
+    let sample_rate = conversion.sample_rate() as f64;
+    let engine = conversion.load(&opts.engine)?;
     let pa = PortAudio::open(&opts.engine.runtime_dir)?;
     let all = pa.wasapi_devices()?;
     let input = all
@@ -284,7 +295,6 @@ fn load(model_dir: &Path, startup: &Startup, devices: &Devices, opts: &RealtimeO
     // realtime_gui.py get_device_channels: min(max input channels, max output channels, 2)
     let channels = input.max_input_channels.min(output.max_output_channels).min(2);
     let block = engine.block_frames();
-    let sample_rate = startup.sample_rate as f64;
 
     // The monitor is only for listening: shared mode (auto-convert) whatever the exclusive option says.
     let mut monitor = None;

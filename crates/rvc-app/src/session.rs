@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use rvc_engine::{voice_model, Devices, Model, Realtime, RealtimeOptions, Startup, Status};
+use rvc_engine::{voice_model, Conversion, DeiterisStartup, Devices, Model, Params, Realtime, RealtimeOptions, Startup, Status};
 use sha2::{Digest, Sha256};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -19,6 +19,8 @@ pub struct Request {
     pub assets_dir: PathBuf,
     pub models_dir: PathBuf,
     pub startup: Startup,
+    pub native: Option<DeiterisStartup>,
+    pub cuda_graph: bool,
     pub devices: Devices,
     pub options: RealtimeOptions,
     pub pitch: f32,
@@ -106,6 +108,14 @@ impl Session {
 }
 
 fn run(inner: &Arc<Mutex<Inner>>, req: Request) -> Result<(), String> {
+    let conversion = if let Some(startup) = req.native {
+        let assets = req.assets_dir.join("deiteris");
+        let model_dir = voice_model::prepare_deiteris_with_progress(&req.voice_model, &assets, &req.models_dir,
+            || inner.lock().unwrap().stage = Stage::Converting)
+            .map_err(|e| format!("声モデルを変換できませんでした: {e}"))?;
+        inner.lock().unwrap().stage = Stage::Loading;
+        Conversion::Deiteris { model_dir, assets, startup, cuda_graph: req.cuda_graph }
+    } else {
     let bytes = std::fs::read(&req.voice_model).map_err(|e| format!("声モデルを読めません: {e}"))?;
     let hash: String = Sha256::digest(&bytes).iter().take(8).map(|b| format!("{b:02x}")).collect();
     drop(bytes);
@@ -115,14 +125,12 @@ fn run(inner: &Arc<Mutex<Inner>>, req: Request) -> Result<(), String> {
         voice_model::convert(&req.voice_model, &req.assets_dir, &model_dir).map_err(|e| format!("声モデルを変換できませんでした: {e}"))?;
         inner.lock().unwrap().stage = Stage::Loading;
     }
-    let rt = Realtime::start(model_dir, req.startup, req.devices, req.options);
-    rt.set_pitch(req.pitch);
-    rt.set_rms_mix(req.rms_mix);
-    rt.set_threshold_db(req.threshold_db);
-    rt.set_skip_silence(req.skip_silence);
-    // the same switch keeps silence out of the engine's context (PoC: the two together)
-    rt.set_drop_silent_context(req.skip_silence);
-    rt.set_monitor_volume(req.monitor_volume);
+        Conversion::Legacy { model_dir, startup: req.startup }
+    };
+    let rt = Realtime::start_configured(conversion, req.devices, req.options, Params {
+        pitch: req.pitch, rms_mix: req.rms_mix, threshold_db: req.threshold_db,
+        skip_silence: req.skip_silence, drop_silent_context: req.skip_silence,
+    }, req.monitor_volume);
     let mut i = inner.lock().unwrap();
     i.stage = Stage::Loading;
     i.realtime = Some(rt);

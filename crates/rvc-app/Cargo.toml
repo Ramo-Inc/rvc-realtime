@@ -1,12 +1,12 @@
 [package]
 name = "rvc-app"
-version = "0.1.6"
+version = "0.1.8"
 edition = "2021"
 publish = false
 description = "Windows app for realtime RVC voice conversion on rvc-engine"
 
 [dependencies]
-rvc-engine = { path = "../rvc-engine" }
+rvc-engine = { path = "../rvc-engine", features = ["deiteris"] }
 eframe = { version = "0.31", default-features = false, features = ["glow", "default_fonts"] }
 rfd = "0.16"
 serde = { version = "1", features = ["derive"] }

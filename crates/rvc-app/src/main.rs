@@ -15,7 +15,7 @@ use eframe::egui;
 use rvc_engine::voice_model::{self, Unsupported};
 use rvc_engine::{list_devices, DeviceList, Devices, EngineOptions, Error, F0Method, F0Window, RealtimeOptions, Startup, Variant};
 use session::{Request, Session, Stage};
-use settings::Settings;
+use settings::{Backend, Settings};
 
 /// The voice model bundled with the app (MIT, see `assets/voices/default_v2_40k.LICENSE.txt`), chosen until the user
 /// picks one.
@@ -31,7 +31,7 @@ const DEVICE_COMBO_WIDTH: f32 = 300.0;
 
 /// The F0 handling of the Deiteris VCClient instead of the official 2.3 path: unvoiced frames stay unvoiced,
 /// RMVPE voicing threshold 0.05, the crossfaded head re-estimated, the whole crossfade overlapped.
-/// Measured against the official path with every sound-quality candidate on (`deiteris_all`).
+/// Measured against the official path in docs/plans/quality-variants-poc/design.md (`deiteris_all`).
 const APP_VARIANT: Variant = Variant { f0_interp: false, rmvpe_threshold: 0.05, f0_window: F0Window::Head, full_crossfade: true };
 
 fn main() -> eframe::Result {
@@ -62,13 +62,18 @@ struct PresetEdit {
 
 enum Check {
     Pending,
-    Ok,
+    Ok(String),
     Unsupported(String),
 }
 
 /// Everything that needs the engine to be started again when it changes.
 #[derive(Clone, PartialEq)]
 struct StartKey {
+    backend: Backend,
+    native_chunk: usize,
+    native_extra: f64,
+    native_crossfade: f64,
+    native_graph: bool,
     input: String,
     output: String,
     monitor: Option<String>,
@@ -140,7 +145,7 @@ impl App {
         let (check, assets, ctx) = (self.check.clone(), self.assets_dir.clone(), self.ctx.clone());
         std::thread::spawn(move || {
             let result = match voice_model::check(&path, &assets) {
-                Ok(_) => Check::Ok,
+                Ok(template) => Check::Ok(template),
                 Err(Error::Unsupported(u)) => Check::Unsupported(match u {
                     Unsupported::Version(v) => format!("対応外の声モデルです（RVC v2 ではありません: {v}）"),
                     Unsupported::NoF0 => "対応外の声モデルです（F0 なし）".into(),
@@ -160,6 +165,11 @@ impl App {
     fn start_key(&self) -> StartKey {
         let s = &self.settings;
         StartKey {
+            backend: s.backend,
+            native_chunk: s.native.chunk,
+            native_extra: s.native.extra_ms,
+            native_crossfade: s.native.crossfade_ms,
+            native_graph: s.native.cuda_graph,
             input: s.input.clone(),
             output: s.output.clone(),
             monitor: s.monitor.clone(),
@@ -186,13 +196,21 @@ impl App {
         if s.voice_model.is_none() {
             return Some("オプションで声モデルを選んでください".into());
         }
-        if let Some(problem) = over_pitch_cache(s.block_ms, s.crossfade_ms, s.extra_ms) {
+        if s.backend == Backend::Deiteris {
+            let startup = self.native_startup();
+            if let Err(e) = startup.dims(40000) { return Some(format!("Deiteris の設定: {e}")); }
+            for file in ["pre.onnx", "prepare.onnx", "post.onnx", "contentvec.onnx", "rmvpe.onnx"] {
+                if !self.assets_dir.join("deiteris").join(file).is_file() {
+                    return Some(format!("Deiteris の資産がありません: {file}"));
+                }
+            }
+        } else if let Some(problem) = over_pitch_cache(s.block_ms, s.crossfade_ms, s.extra_ms) {
             return Some(problem);
         }
         match &self.check.lock().unwrap().1 {
             Check::Pending => Some("声モデルを確認しています…".into()),
             Check::Unsupported(reason) => Some(reason.clone()),
-            Check::Ok => None,
+            Check::Ok(_) => None,
         }
     }
 
@@ -204,6 +222,8 @@ impl App {
         let f0 = if s.f0 == "rmvpe" { F0Method::Rmvpe } else { F0Method::Fcpe };
         self.started = Some(self.start_key());
         self.session.start(Request {
+            native: (s.backend == Backend::Deiteris).then(|| self.native_startup()),
+            cuda_graph: s.native.cuda_graph,
             voice_model,
             assets_dir: self.assets_dir.clone(),
             models_dir: settings::models_dir(),
@@ -212,10 +232,28 @@ impl App {
             options: RealtimeOptions { engine: EngineOptions { runtime_dir: self.runtime_dir.clone(), seed: 1 } },
             pitch: voice.pitch,
             rms_mix: s.rms_mix,
-            threshold_db: s.threshold_db,
-            skip_silence: s.skip_silence,
+            threshold_db: if s.backend == Backend::Deiteris { s.native.threshold_db } else { s.threshold_db },
+            skip_silence: s.backend == Backend::Legacy && s.skip_silence,
             monitor_volume: s.monitor_volume as f32 / 100.0,
         });
+    }
+
+    fn native_startup(&self) -> rvc_engine::DeiterisStartup {
+        let s = &self.settings;
+        let sample_rate = self.devices.as_ref().ok()
+            .and_then(|d| d.inputs.iter().find(|d| d.name == s.input)).map_or(48000, |d| d.default_sample_rate);
+        rvc_engine::DeiterisStartup {
+            sample_rate: sample_rate as usize, chunk: s.native.chunk,
+            extra_ms: s.native.extra_ms, crossfade_ms: s.native.crossfade_ms,
+            formant: s.voice_model.as_ref().and_then(|p| s.voices.get(p)).map_or(0.0, |v| v.formant),
+        }
+    }
+
+    fn effective_block_ms(&self) -> f64 {
+        if self.settings.backend == Backend::Deiteris {
+            let s = self.native_startup();
+            s.chunk as f64 * 128000.0 / s.sample_rate as f64
+        } else { self.settings.block_ms }
     }
 
     fn main_row(&mut self, ui: &mut egui::Ui, stage: Stage) {
@@ -258,8 +296,8 @@ impl App {
             let ms = self.session.with_realtime(|rt| rt.infer_ms()).unwrap_or(0.0);
             let text = format!("変換時間 {ms:.1} ms");
             // a block has to be converted within its own length, or the audio stream runs dry
-            if ms as f64 > self.settings.block_ms {
-                ui.colored_label(ui.visuals().error_fg_color, format!("{text}（ブロック長 {:.0} ms に間に合っていません）", self.settings.block_ms));
+            if ms as f64 > self.effective_block_ms() {
+                ui.colored_label(ui.visuals().error_fg_color, format!("{text}（ブロック長 {:.2} ms に間に合っていません）", self.effective_block_ms()));
             } else {
                 ui.label(text);
             }
@@ -271,6 +309,8 @@ impl App {
     }
 
     fn options(&mut self, ui: &mut egui::Ui) {
+        let device_rate = self.native_startup().sample_rate;
+        let voice_quality_unverified = matches!(&self.check.lock().unwrap().1, Check::Ok(name) if name == "32k" || name == "48k");
         let names = |f: fn(&DeviceList) -> &Vec<rvc_engine::DeviceEntry>| -> Vec<String> {
             self.devices.as_ref().map(|d| f(d).iter().map(|e| e.name.clone()).collect()).unwrap_or_default()
         };
@@ -421,6 +461,21 @@ impl App {
 
         section_divider(ui, self.options_width);
         ui.heading("声の調整");
+        ui.horizontal(|ui| {
+            ui.label("変換経路");
+            ui.selectable_value(&mut s.backend, Backend::Deiteris, "Deiteris（検証中）");
+            ui.selectable_value(&mut s.backend, Backend::Legacy, "従来");
+        });
+        let native = s.backend == Backend::Deiteris;
+        if native {
+            ui.colored_label(ui.visuals().warn_fg_color, "50ms動作の安定性は評価中です。RMVPE ONNX・原本の音量処理を使用します。");
+            if device_rate == 44100 {
+                ui.weak("44.1kHzは原本との有声判定差が未解決です。約50msはchunk 17です。");
+            }
+            if voice_quality_unverified {
+                ui.weak("32k/48k声モデルは構造のみ検証済みで、実声音質は未確認です。");
+            }
+        }
         egui::Grid::new("voice").num_columns(2).show(ui, |ui| {
             if let Some(v) = s.voice() {
                 ui.label("pitch");
@@ -431,10 +486,10 @@ impl App {
                 ui.end_row();
             }
             ui.label("rms_mix");
-            ui.add(egui::Slider::new(&mut s.rms_mix, 0.0..=1.0).step_by(0.01));
+            ui.add_enabled(!native, egui::Slider::new(&mut s.rms_mix, 0.0..=1.0).step_by(0.01));
             ui.end_row();
             ui.label("F0 方式");
-            ui.horizontal(|ui| {
+            ui.add_enabled_ui(!native, |ui| {
                 ui.radio_value(&mut s.f0, "rmvpe".to_string(), "RMVPE");
                 ui.radio_value(&mut s.f0, "fcpe".to_string(), "FCPE");
             });
@@ -443,6 +498,13 @@ impl App {
 
         section_divider(ui, self.options_width);
         ui.heading("雑音");
+        if native {
+            ui.horizontal(|ui| {
+                ui.label("Deiteris 無音しきい値");
+                ui.add(egui::Slider::new(&mut s.native.threshold_db, -120.0..=0.0).step_by(1.0).suffix(" dB"));
+            });
+            ui.weak("原本の無音処理（既定 −90dB）。無音でも推論は継続します。従来の省電力設定は適用しません。");
+        } else {
         egui::Grid::new("noise").num_columns(2).show(ui, |ui| {
             ui.label("無音のしきい値");
             ui.add(egui::Slider::new(&mut s.threshold_db, -60.0..=0.0).step_by(1.0).suffix(" dB"));
@@ -456,9 +518,29 @@ impl App {
             });
             ui.end_row();
         });
+        }
 
         section_divider(ui, self.options_width);
         ui.heading("性能");
+        if native {
+            egui::Grid::new("native_perf").num_columns(2).show(ui, |ui| {
+                ui.label("Chunk（128 samples）");
+                ui.add(egui::Slider::new(&mut s.native.chunk, 1..=256));
+                ui.end_row();
+                ui.label("実効ブロック長");
+                ui.label(format!("{:.3} ms / {} Hz", s.native.chunk as f64 * 128000.0 / device_rate as f64, device_rate));
+                ui.end_row();
+                ui.label("クロスフェード");
+                ui.add(egui::Slider::new(&mut s.native.crossfade_ms, 1.0..=1000.0).step_by(1.0).suffix(" ms"));
+                ui.end_row();
+                ui.label("文脈長");
+                ui.add(egui::Slider::new(&mut s.native.extra_ms, 50.0..=5000.0).step_by(10.0).suffix(" ms"));
+                ui.end_row();
+                ui.label("生成器");
+                ui.checkbox(&mut s.native.cuda_graph, "CUDA Graph");
+                ui.end_row();
+            });
+        } else {
         egui::Grid::new("perf").num_columns(2).show(ui, |ui| {
             ui.label("ブロック長");
             ui.add(egui::Slider::new(&mut s.block_ms, 20.0..=1000.0).step_by(1.0).suffix(" ms"));
@@ -475,6 +557,7 @@ impl App {
                 ui.end_row();
             }
         });
+        }
         if picked {
             self.check_voice_model();
         }
@@ -627,7 +710,9 @@ impl eframe::App for App {
         // current start has finished
         if let Some(voice) = self.settings.voice().copied() {
             let (rms_mix, volume) = (self.settings.rms_mix, self.settings.monitor_volume as f32 / 100.0);
-            let (threshold, skip) = (self.settings.threshold_db, self.settings.skip_silence);
+            let native = self.started.as_ref().is_some_and(|k| k.backend == Backend::Deiteris);
+            let (threshold, skip) = if native { (self.settings.native.threshold_db, false) }
+                else { (self.settings.threshold_db, self.settings.skip_silence) };
             self.session.with_realtime(|rt| {
                 rt.set_pitch(voice.pitch);
                 rt.set_rms_mix(rms_mix);

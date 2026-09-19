@@ -1,16 +1,18 @@
 <!--
   RVC Realtime installer (WiX Toolset 5).
-  Build with WiX 5.0.2 (dotnet tool) from this folder, after assembling the payload in dist-work\stage
-  (rvc-app.exe, ONNX Runtime provider DLLs, DirectML.dll, VC++ runtime DLLs, runtime\, assets\, THIRD_PARTY_NOTICES.txt):
-    wix build rvc-app.wxs -ext WixToolset.UI.wixext -culture ja-JP -bindpath Stage=../dist-work/stage -o ../dist/RVC-Realtime-0.1.6-alpha.msi
+  Build (after assembling a fresh versioned payload with stage-onnx.ps1):
+    cd installer
+    wix build rvc-app.wxs -ext WixToolset.UI.wixext -culture ja-JP -bindpath Stage=../dist-work/RVC-Realtime-0.1.8-onnx -o ../dist/RVC-Realtime-0.1.8-alpha.msi
+    All cabinets are embedded; distribute the single MSI after size verification.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
-  <Package Name="RVC Realtime" Manufacturer="RVC Realtime" Version="0.1.6" Scope="perMachine"
+  <Package Name="RVC Realtime" Manufacturer="RVC Realtime" Version="0.1.8" Scope="perMachine"
            UpgradeCode="abc1243c-ca79-481b-bf17-22c8a491a6d6" Language="1041" Codepage="932">
     <SummaryInformation Description="RVC Realtime - realtime voice changer" Codepage="932" />
     <!-- An install over an existing one replaces it (same version included, so a rebuild reinstalls). -->
     <MajorUpgrade AllowSameVersionUpgrades="yes"
                   DowngradeErrorMessage="新しいバージョンの RVC Realtime がすでにインストールされています。" />
+    <!-- The ONNX-only payload fits the Windows Installer 2GB package limit. -->
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <Icon Id="AppIcon" SourceFile="icon/rvc-app.ico" />

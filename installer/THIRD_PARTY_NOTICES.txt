@@ -39,5 +39,13 @@ Default voice model (assets\voices\default_v2_40k.pth)
   https://huggingface.co/PhoenixStormJr/RVC-V2-default-voice
   The full license text is in assets\voices\default_v2_40k.LICENSE.txt.
 
+Deiteris voice-changer processing and generator (assets\deiteris)
+  MIT License, Copyright (c) 2022 Wataru Okada.
+  https://github.com/deiteris/voice-changer
+  The full upstream license text is in DEITERIS_LICENSE.txt.
+  The separately downloaded ContentVec/RMVPE assets have their own conditions;
+  this local validation build is not cleared for public redistribution.
+  LibTorch and Python are not included in this ONNX build.
+
 egui / eframe, rfd, serde, sha2, zip, safetensors and the other Rust crates linked into rvc-app.exe
   MIT or Apache-2.0 licenses.

@@ -5,9 +5,34 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Backend {
+    #[default]
+    Legacy,
+    Deiteris,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NativeSettings {
+    pub chunk: usize,
+    pub extra_ms: f64,
+    pub crossfade_ms: f64,
+    pub threshold_db: f32,
+    pub cuda_graph: bool,
+}
+impl Default for NativeSettings {
+    fn default() -> Self {
+        Self { chunk: 19, extra_ms: 500.0, crossfade_ms: 100.0, threshold_db: -90.0, cuda_graph: true }
+    }
+}
+
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    #[serde(default)]
+    pub backend: Backend,
+    pub native: NativeSettings,
     pub input: String,
     pub output: String,
     pub monitor: Option<String>,
@@ -40,7 +65,7 @@ pub struct Settings {
 }
 
 /// 1: FCPE, crossfade 80 ms, rms_mix 0.5 (up to 0.1.5). 2: RMVPE, crossfade 100 ms, rms_mix 1.0 (0.1.6,
-/// with the Deiteris VCClient F0 handling in `main.rs`).
+/// with the Deiteris VCClient F0 handling in `main.rs`, docs/plans/quality-variants-poc/design.md).
 const DEFAULTS_VERSION: u32 = 2;
 
 /// Reads `null` as an empty string (earlier settings files stored no active preset as `null`).
@@ -54,6 +79,10 @@ pub const DEFAULT_PRESET: &str = "デフォルト";
 /// Everything the options window shows, saved under a name.
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Preset {
+    #[serde(default)]
+    pub backend: Backend,
+    #[serde(default)]
+    pub native: NativeSettings,
     pub name: String,
     pub input: String,
     pub output: String,
@@ -82,6 +111,8 @@ impl Default for Settings {
     /// block 60 ms and context 1000 ms (lowlat), RMVPE, the whole 100 ms crossfaded, rms_mix off
     fn default() -> Self {
         Self {
+            backend: Backend::Deiteris,
+            native: NativeSettings::default(),
             input: String::new(),
             output: String::new(),
             monitor: None,
@@ -211,6 +242,8 @@ impl Settings {
         let voice = self.voice().copied().unwrap_or(Voice { pitch: 0.0, formant: 0.0 });
         let voice_model = if name == DEFAULT_PRESET { Some(self.default_voice.clone()) } else { self.voice_model.clone() };
         Preset {
+            backend: self.backend,
+            native: self.native.clone(),
             name: name.to_string(),
             voice_model,
             input: self.input.clone(),
@@ -232,6 +265,8 @@ impl Settings {
 
     /// Makes every option the preset's value.
     pub fn load_preset(&mut self, p: &Preset) {
+        self.backend = p.backend;
+        self.native = p.native.clone();
         self.input = p.input.clone();
         self.output = p.output.clone();
         self.monitor = p.monitor.clone();
@@ -265,4 +300,35 @@ fn vcclient_defaults(model: &Path) -> Option<Voice> {
         return None;
     }
     Some(Voice { pitch: p["defaultTune"].as_f64()? as f32, formant: p["defaultFormantShift"].as_f64()? })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn old_configuration_stays_legacy_and_native_preset_roundtrips() {
+        let old: Settings = serde_json::from_str(r#"{"block_ms":50.0,"threshold_db":-42.0}"#).unwrap();
+        assert_eq!(old.backend, Backend::Legacy);
+        assert_eq!(old.block_ms, 50.0);
+        assert_eq!(old.threshold_db, -42.0);
+        let mut fresh = Settings::default();
+        assert_eq!(fresh.backend, Backend::Deiteris);
+        fresh.native.chunk = 17;
+        fresh.native.threshold_db = -83.0;
+        fresh.save_preset("native");
+        let encoded = serde_json::to_string(&fresh).unwrap();
+        let mut restored: Settings = serde_json::from_str(&encoded).unwrap();
+        restored.backend = Backend::Legacy;
+        restored.native.chunk = 99;
+        let p = restored.presets[0].clone();
+        restored.load_preset(&p);
+        assert_eq!(restored.backend, Backend::Deiteris);
+        assert_eq!(restored.native.chunk, 17);
+        assert_eq!(restored.native.threshold_db, -83.0);
+        let mut old_preset = serde_json::to_value(p).unwrap();
+        old_preset.as_object_mut().unwrap().remove("backend");
+        old_preset.as_object_mut().unwrap().remove("native");
+        let old_preset: Preset = serde_json::from_value(old_preset).unwrap();
+        assert_eq!(old_preset.backend, Backend::Legacy);
+    }
 }

@@ -28,7 +28,7 @@ pub(crate) fn prepend_path(dir: &Path) {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
         let old = std::env::var_os("PATH").unwrap_or_default();
-        let mut paths = vec![dir.to_path_buf()];
+        let mut paths = vec![std::path::absolute(dir).unwrap_or_else(|_| dir.to_path_buf())];
         paths.extend(std::env::split_paths(&old));
         if let Ok(joined) = std::env::join_paths(paths) {
             std::env::set_var("PATH", joined);

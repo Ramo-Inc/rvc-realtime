@@ -4,7 +4,7 @@
 
 **A realtime RVC voice changer for Windows, written in Rust — no Python at runtime.**
 
-It ports the realtime path of the official [RVC WebUI](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI) 2.3.260718 line by line, runs it on ONNX Runtime with CUDA Graphs, and checks it stage by stage against the official Python.
+Version 0.1.8 adds the complete no-index/RMVPE conversion path used by the [Deiteris VCClient fork](https://github.com/deiteris/voice-changer), including its stateful F0, volume/silence, generator and SOLA processing. The entire product path runs on ONNX Runtime; LibTorch and Python are not runtime dependencies.
 
 ![Rust](https://img.shields.io/badge/Rust-2021-b7410e?logo=rust&logoColor=white)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4?logo=windows&logoColor=white)
@@ -22,9 +22,9 @@ It ports the realtime path of the official [RVC WebUI](https://github.com/RVC-Pr
 
 ## Why
 
-- **One small exe instead of a Python stack.** No conda, no pip, no torch install. Pick your RVC model file and press Start.
-- **The official algorithm, not an approximation.** Every buffer length, resample, pitch cache and SOLA step follows the official `RVCStreamEngine`. Correctness is measured against the official code, not eyeballed.
-- **Light on the GPU.** It is built to run next to games, OBS and Discord. No background busy-work keeps the GPU spinning.
+- **No Python stack at runtime.** No conda, pip or separate server. Pick your RVC model file and press Start.
+- **Two conversion paths.** New installations default to the Deiteris no-index/RMVPE path; existing settings remain on the previous official-RVC ONNX path until changed.
+- **Measured, not guessed.** Buffer lengths, state and each conversion stage are checked against their upstream implementations. This is still an alpha; known limitations are listed below.
 
 ## Features
 
@@ -34,25 +34,24 @@ It ports the realtime path of the official [RVC WebUI](https://github.com/RVC-Pr
 | 🎁 **Works out of the box** | A redistributable default voice (MIT) is bundled and selected until you pick your own model |
 | 📦 **Use your model file as is** | `.pth` (official training output) and `.safetensors` load directly; they are converted in Rust in under a second on first start |
 | 🗣️ **Breath stays breath** | Unvoiced frames (breath, consonants, room noise) stay unvoiced instead of being given the neighbouring pitch, as in the older official code and the Deiteris VCClient fork |
-| 🎚️ **Official parameters** | pitch, formant, rms_mix, RMVPE / FCPE, block / crossfade lengths with the official ranges, and context up to 10 s |
+| 🎚️ **Conversion-path controls** | Deiteris: pitch, formant, chunk, crossfade, extra context and silence threshold. Legacy: pitch, formant, rms_mix, RMVPE / FCPE, block / crossfade and context |
 | 🔁 **Change settings while running** | pitch, rms_mix, the silence settings and monitor volume apply instantly; everything else restarts the engine automatically |
 | 🎧 **Monitor output** | Hear yourself on a second device at its own volume, without changing what goes to Discord or OBS. Its own clock is absorbed by a queue, so it does not click |
-| 🤫 **Idle on silence** | While nobody speaks, the models stop running: GPU usage drops to 0 %. The first loud block resumes at once |
+| 🤫 **Optional idle on silence** | Available on the legacy path. The Deiteris path keeps its original volume/silence state handling |
 | 💾 **Named settings** | Save, overwrite, rename and delete whole configurations (devices, model, voice, performance) |
 | 🔊 **WASAPI exclusive** | The same option as the official GUI |
 | 🪶 **Small, simple UI** | A Start button and an Options window that sizes itself to its content |
 
 ## Numbers
 
-Measured on an RTX 3060 Ti with the `lowlat-fcpe` configuration (block 60 ms, crossfade 80 ms, context 1000 ms, FCPE, 48 kHz device), the default up to 0.1.5. The 0.1.6 default (RMVPE) takes about 19 ms per block back-to-back.
+0.1.8 Deiteris-path measurement on an RTX 3060 Ti, 48 kHz, chunk 19 (50.67 ms), 60 seconds at real-time cadence. This is a local alpha measurement, not a general hardware guarantee.
 
 | What | Result |
 |---|---|
-| Block time at real-time pace | p50 **15.7 ms**, p95 21.2 ms (for a 60 ms block) |
-| GPU usage while converting (Task Manager, 3D) | **~24–32 %** |
-| Match with the official Python (same generator noise) | pitch frames **100 %** equal, log-mel L1 0.030, F0 RMSE 4.3 cents |
-| Voice model conversion (`.safetensors` → engine files) | **< 1 s** |
-| Engine start, warm | ~1.5 s |
+| Steady block time | p50 **25.13 ms**, p95 28.18 ms, p99 30.13 ms (50.67 ms period) |
+| Deadline stability | 0 misses in one 1185-block run; 3 slow blocks in a repeat run, still under investigation |
+| GPU usage while converting (Task Manager, process 3D) | about **61.8 %** average in the repeat run |
+| Legacy-path regression | seed-7 WAV remains byte-identical to the 0.1.6 baseline |
 
 Block time is taken from the engine's own timing at real-time pace. GPU usage is the Task Manager figure (`GPU Engine 3D`, summed), because `nvidia-smi` under-reports it. Parity uses the official Python with the same generator noise.
 
@@ -79,12 +78,14 @@ flowchart LR
     post -. latest block .-> mon[Monitor device]
 ```
 
-- **`crates/rvc-engine`** — the engine library.
+- **`crates/rvc-engine`** — the device-independent `Processor` plus realtime audio devices.
   - `Engine` converts one block (a port of `RVCStreamEngine.process` + `rtrvc.RVC.infer`).
   - `Realtime` owns the audio devices.
   - `voice_model` turns a `.pth` / `.safetensors` into engine files.
 - **`crates/rvc-app`** — the Windows app (egui).
-- **ONNX Runtime + CUDA Graphs.** Every length is fixed when the engine starts, so each model runs as a captured CUDA graph with pre-bound GPU buffers.
+- **`crates/rvc-deiteris`** — the Deiteris state machine and ONNX generator. The generator is created, processed and destroyed on one owning thread.
+- **`crates/rvc-model`** — the shared `.pth` / `.safetensors` reader.
+- **ONNX Runtime + CUDA Graphs.** Every length is fixed when the engine starts. Python/Torch are used only for development-time exports and comparisons.
 - **Rust-only model conversion.** The generator graph is shipped once per official training config (32k / 40k / 48k) with its weights as external data. Converting a model means reading its tensors (including a minimal unpickler for torch `.pth`) and writing them at fixed offsets, the way the official loader does (fp32 → `remove_weight_norm` → fp16).
 
 ## Status
@@ -95,15 +96,17 @@ flowchart LR
   - 40k is verified with a real model.
   - 32k and 48k are verified against torch with random weights.
 - ❌ Not supported yet: RVC v1, models without F0, index files, noise suppression, CPU / AMD / Intel GPUs, macOS / Linux.
+- ⚠️ 44.1 kHz still has an unresolved voiced/unvoiced difference from the pinned upstream comparison. 32k/48k voice structures are checked, but their real-audio quality is not yet accepted.
+- ⚠️ The 44.1 kHz / short-extra owner/direct comparison remains below the project acceptance threshold. 0.1.8 is an alpha, not a bit-exact-output claim for every setting.
 - 📦 The runtime DLLs and ONNX assets are not in this repository. Building from source needs the dev tools below.
 
 ## Download
 
-The Windows installer (`RVC-Realtime-<version>-alpha.msi`) is on the [Releases](https://github.com/Ramo-Inc/rvc-realtime/releases) page. It bundles CUDA, cuDNN and ONNX Runtime; you only need an NVIDIA GPU with a driver that supports CUDA 13. Installing a newer version updates the existing install in place.
+The Windows installer (`RVC-Realtime-0.1.8-alpha.msi`) is on the [Releases](https://github.com/Ramo-Inc/rvc-realtime/releases) page. It is one self-contained MSI; no external CAB files are required. It bundles the runtime, so you only need an NVIDIA GPU with a current driver. Installing a newer version updates the existing install in place.
 
 ## Build from source
 
-Requirements: Windows 10/11 x64, an NVIDIA GPU with a driver that supports CUDA 13, Rust (stable), and — for generating assets only — Python with [uv](https://github.com/astral-sh/uv).
+Requirements: Windows 10/11 x64, an NVIDIA GPU with a current driver, and Rust (stable). Python with [uv](https://github.com/astral-sh/uv) and PyTorch are needed only to export assets.
 
 Everything generated or downloaded goes into `assets/` (git-ignored). Run the commands from the repository root.
 
@@ -120,7 +123,8 @@ Everything generated or downloaded goes into `assets/` (git-ignored). Run the co
    uv run --project tools python tools/export_generator_template.py --out assets/app --model assets/app/voices/default_v2_40k.pth --check
    ```
    Copy `contentvec.onnx`, `rmvpe.onnx` and `fcpe.onnx` from `assets/onnx-dynamic/` into `assets/app/`.
-5. **Build and run:**
+5. **Deiteris assets.** The app expects `assets/app/deiteris/{pre,prepare,post,contentvec,rmvpe}.onnx` and `assets/app/deiteris/templates/{32k,40k,48k}/{generator.onnx,template.json}`. They are bundled in the release. `tools/export_deiteris_generator_template.py` reproduces the generator templates from a Deiteris checkout; the verified frontend graphs are not regenerated during a normal Rust build.
+6. **Build and run:**
    ```bash
    cd crates/rvc-app
    cargo build --release
@@ -182,14 +186,14 @@ Not decided yet.
 
 ### ダウンロード
 
-Windows 用のインストーラー（`RVC-Realtime-<バージョン>-alpha.msi`）は [Releases](https://github.com/Ramo-Inc/rvc-realtime/releases) にあります。CUDA・cuDNN・ONNX Runtime は同梱しているので、必要なのは CUDA 13 対応ドライバーの NVIDIA GPU だけです。新しい版を入れると、前の版のフォルダがそのまま更新されます。
+Windows 用インストーラー `RVC-Realtime-0.1.8-alpha.msi` は [Releases](https://github.com/Ramo-Inc/rvc-realtime/releases) にあります。単体で完結しており、外部CABは不要です。ランタイムは同梱しているので、必要なのは現行ドライバーのNVIDIA GPUです。新しい版を入れると、前の版のフォルダがそのまま更新されます。
 
 ### できること
 
 - **すぐ試せる:** 再配布できる既定の声モデル（MIT）が入っていて、自分のモデルを選ぶまではそれが使われます。
 - **声モデルをそのまま使える:** `.pth` / `.safetensors` を選ぶだけです。初回のスタート時に、Rust で 1 秒未満で変換します。
 - **息は息のまま:** 息・子音・部屋の雑音を、前後の声の高さで埋めずに無声のまま変換します（旧版の公式と Deiteris 版 VCClient と同じ）。
-- **公式と同じパラメータ:** pitch、formant、rms_mix、RMVPE / FCPE、ブロック長・クロスフェード・文脈長。範囲も公式と同じです。
+- **2つの変換経路:** 新規設定はDeiterisのindexなし/RMVPE経路です。従来経路も残してあり、既存設定は自動で切り替わりません。
 - **変換中に設定を変えられる:** pitch・rms_mix・無音の設定・モニター音量はその場で反映します。それ以外は自動で作り直して再開します。
 - **モニター出力:** 配信や通話に送る音とは別に、自分の声を別のデバイスで、別の音量で聴けます。機器ごとの時計のズレは待ち行列で吸収するので、プチ音が入りません。
 - **無音のときは変換しない:** 黙っている間はモデルを動かさず、GPU 使用率が 0% になります。声が出たらすぐ戻ります。
@@ -197,11 +201,11 @@ Windows 用のインストーラー（`RVC-Realtime-<バージョン>-alpha.msi`
 - **WASAPI 排他:** 公式 GUI と同じ選択肢です。
 - **シンプルな画面:** スタートとオプションだけです。オプション窓は中身に合わせた大きさで開きます。
 
-### 数字（RTX 3060 Ti、block 60 ms / FCPE）
+### 0.1.8の数字（RTX 3060 Ti、48 kHz / chunk 19）
 
-- **1 ブロックの処理時間:** 中央値 15.7 ms（60 ms のブロックに対して）。
-- **変換中の GPU 使用率:** タスクマネージャーの 3D で約 24〜32%。
-- **公式との一致:** 同じ雑音で比べて、ピッチは 100% 一致、log-mel L1 は 0.030。
+- **定常1ブロック:** 中央値25.13 ms、p99 30.13 ms（50.67 ms周期）。
+- **安定性:** 1回目は期限超過0/1185、再測定は遅いブロック3/1185。継続調査中です。
+- **GPU使用率:** 再測定でタスクマネージャーのプロセス3D平均約61.8%。
 
 ### クレジット（既定の声モデル）
 
