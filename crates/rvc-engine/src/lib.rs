@@ -11,6 +11,8 @@ pub mod noise;
 mod error;
 mod infer;
 mod monitor;
+#[doc(hidden)]
+pub mod onset;
 mod portaudio;
 mod realtime;
 mod processor;

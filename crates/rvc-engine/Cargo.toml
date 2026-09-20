@@ -39,3 +39,7 @@ required-features = ["deiteris"]
 [[example]]
 name = "deiteris_generator_check"
 required-features = ["deiteris"]
+
+[[example]]
+name = "debug_latency"
+required-features = ["deiteris"]

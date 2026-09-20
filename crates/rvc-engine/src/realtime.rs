@@ -15,6 +15,7 @@ use crate::processor::{Conversion, Processor};
 use crate::engine::{EngineOptions, Params};
 use crate::error::{Error, Result};
 use crate::monitor::MonitorBuffer;
+use crate::onset::OnsetLatency;
 use crate::portaudio::{PaStream, PortAudio, PA_ABORT, PA_CONTINUE};
 
 pub struct Devices {
@@ -70,6 +71,8 @@ struct Shared {
     skip_silence: AtomicBool,
     monitor_volume: AtomicU32,
     infer_ms: AtomicU32,
+    /// Packed elapsed time + block distance from the same detected utterance.
+    onset_measurement: AtomicU64,
     /// time of the last stream callback, in ms since `epoch`
     epoch: Instant,
     last_callback_ms: AtomicU64,
@@ -98,6 +101,7 @@ impl Shared {
 /// State owned by the stream callback.
 struct CallbackState {
     engine: Processor,
+    onset: OnsetLatency,
     /// how long one block lasts, in seconds: conversion has to stay inside it
     block_seconds: f64,
     shared: Arc<Shared>,
@@ -162,6 +166,7 @@ impl Realtime {
             skip_silence: AtomicBool::new(initial.skip_silence),
             monitor_volume: AtomicU32::new(monitor_volume.clamp(0.0, 1.0).to_bits()),
             infer_ms: AtomicU32::new(0f32.to_bits()),
+            onset_measurement: AtomicU64::new(f32::NAN.to_bits() as u64),
             epoch: Instant::now(),
             last_callback_ms: AtomicU64::new(0),
             late_blocks: AtomicU64::new(0),
@@ -245,6 +250,14 @@ impl Realtime {
         f32::from_bits(self.shared.infer_ms.load(Ordering::Relaxed))
     }
 
+    /// Last measured utterance onset: input callback delivery to generated output
+    /// readiness, excluding hardware playback. None until a quiet-to-sound pair.
+    pub fn onset_latency(&self) -> Option<(f32, u32)> {
+        let packed = self.shared.onset_measurement.load(Ordering::Relaxed);
+        let ms = f32::from_bits(packed as u32);
+        ms.is_finite().then_some((ms, (packed >> 32) as u32))
+    }
+
     /// Closes streams and joins the inference owner; counters remain readable afterward.
     pub fn stop(&mut self) {
         if let Some(handle) = self.loader.take() { drop(handle.join()); }
@@ -321,7 +334,7 @@ fn load(conversion: Conversion, devices: &Devices, opts: &RealtimeOptions, share
     }
 
     let block_seconds = block as f64 / sample_rate;
-    let state = Box::into_raw(Box::new(CallbackState { engine, block_seconds, shared: shared.clone(), channels: channels as usize, mono: vec![0.0; block], monitor: latest }));
+    let state = Box::into_raw(Box::new(CallbackState { engine, onset: OnsetLatency::new(sample_rate as u32), block_seconds, shared: shared.clone(), channels: channels as usize, mono: vec![0.0; block], monitor: latest }));
     let stream = match pa.start(Some(input), output, channels, sample_rate, block as u32, devices.wasapi_exclusive, callback, state as *mut c_void) {
         Ok(stream) => stream,
         Err(e) => {
@@ -342,6 +355,11 @@ const STREAM_STALL_MS: u64 = 3000;
 /// `realtime_gui.py` `audio_callback`: to_mono, convert the block, repeat it to every output channel.
 unsafe extern "C" fn callback(input: *const c_void, output: *mut c_void, frames: u32, _time: *const c_void, flags: u32, user: *mut c_void) -> i32 {
     let st = &mut *(user as *mut CallbackState);
+    let input_seen = st.shared.epoch.elapsed();
+    if flags != 0 {
+        st.onset.reset();
+        st.shared.onset_measurement.store(f32::NAN.to_bits() as u64, Ordering::Relaxed);
+    }
     // paInputOverflow: the device had more input than the callback took; paOutputUnderflow: the device
     // played something we did not deliver in time. Either one is an audible discontinuity.
     if flags & 0x2 != 0 {
@@ -355,6 +373,8 @@ unsafe extern "C" fn callback(input: *const c_void, output: *mut c_void, frames:
     let ch = st.channels;
     let out = std::slice::from_raw_parts_mut(output as *mut f32, frames * ch);
     if input.is_null() || frames != st.mono.len() {
+        st.onset.reset();
+        st.shared.onset_measurement.store(f32::NAN.to_bits() as u64, Ordering::Relaxed);
         out.fill(0.0);
         return PA_CONTINUE;
     }
@@ -377,6 +397,14 @@ unsafe extern "C" fn callback(input: *const c_void, output: *mut c_void, frames:
             }
             if let Some(buffer) = &st.monitor {
                 buffer.push(converted);
+            }
+            // The primary output buffer has been filled. This is our handoff
+            // boundary, not the time the hardware plays the buffer.
+            let output_written = st.shared.epoch.elapsed();
+            if flags == 0 {
+                if let Some(measurement) = st.onset.observe(&st.mono, converted, input_seen, output_written) {
+                    st.shared.onset_measurement.store(measurement.packed(), Ordering::Relaxed);
+                }
             }
             let took = t.elapsed().as_secs_f64();
             st.shared.infer_ms.store((took as f32 * 1000.0).to_bits(), Ordering::Relaxed);

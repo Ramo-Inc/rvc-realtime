@@ -97,12 +97,12 @@ flowchart LR
   - 32k and 48k are verified against torch with random weights.
 - ❌ Not supported yet: RVC v1, models without F0, index files, noise suppression, CPU / AMD / Intel GPUs, macOS / Linux.
 - ⚠️ 44.1 kHz still has an unresolved voiced/unvoiced difference from the pinned upstream comparison. 32k/48k voice structures are checked, but their real-audio quality is not yet accepted.
-- ⚠️ The 44.1 kHz / short-extra owner/direct comparison remains below the project acceptance threshold. 0.1.8 is an alpha, not a bit-exact-output claim for every setting.
+- ⚠️ The 44.1 kHz / short-extra owner/direct comparison remains below the project acceptance threshold. 0.1.9 is an alpha, not a bit-exact-output claim for every setting.
 - 📦 The runtime DLLs and ONNX assets are not in this repository. Building from source needs the dev tools below.
 
 ## Download
 
-The Windows installer (`RVC-Realtime-0.1.8-alpha.msi`) is on the [Releases](https://github.com/Ramo-Inc/rvc-realtime/releases) page. It is one self-contained MSI; no external CAB files are required. It bundles the runtime, so you only need an NVIDIA GPU with a current driver. Installing a newer version updates the existing install in place.
+The Windows installer (`RVC-Realtime-0.1.9-alpha.msi`) is on the [Releases](https://github.com/Ramo-Inc/rvc-realtime/releases) page. It is one self-contained MSI; no external CAB files are required. It bundles the runtime, so you only need an NVIDIA GPU with a current driver. Installing a newer version updates the existing install in place.
 
 ## Build from source
 
@@ -186,7 +186,7 @@ Not decided yet.
 
 ### ダウンロード
 
-Windows 用インストーラー `RVC-Realtime-0.1.8-alpha.msi` は [Releases](https://github.com/Ramo-Inc/rvc-realtime/releases) にあります。単体で完結しており、外部CABは不要です。ランタイムは同梱しているので、必要なのは現行ドライバーのNVIDIA GPUです。新しい版を入れると、前の版のフォルダがそのまま更新されます。
+Windows 用インストーラー `RVC-Realtime-0.1.9-alpha.msi` は [Releases](https://github.com/Ramo-Inc/rvc-realtime/releases) にあります。単体で完結しており、外部CABは不要です。ランタイムは同梱しているので、必要なのは現行ドライバーのNVIDIA GPUです。新しい版を入れると、前の版のフォルダがそのまま更新されます。
 
 ### できること
 

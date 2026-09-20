@@ -301,6 +301,14 @@ impl App {
             } else {
                 ui.label(text);
             }
+            let latency = self.session.with_realtime(|rt| rt.onset_latency()).flatten();
+            ui.label(match latency {
+                Some((ms, _)) => format!("発声→出力（ブロック実測） {ms:.0} ms"),
+                None => "発声→出力 — 無音からの発声待ち".to_owned(),
+            }).on_hover_text(format!("発声を含む入力ブロックの受信から、その発声が現れた出力ブロックの書き込み完了までを計測します。直近の発声の値を保持します。\n{}\n両側300msの無音後、−45dBFSを5ms以上で検出。収録済みブロックの受信から測るため、受信前の収録待ち・機器の再生待ちは含みません。", match latency {
+                Some((_, blocks)) => format!("今回の記録：入力検出から出力までのブロック間隔 {blocks}。"),
+                None => "まだ発声と出力の組を検出していません。".to_owned(),
+            }));
         } else if stage == Stage::Idle {
             if let Some(m) = missing {
                 ui.add(egui::Label::new(m).wrap());
@@ -470,7 +478,7 @@ impl App {
         if native {
             ui.colored_label(ui.visuals().warn_fg_color, "50ms動作の安定性は評価中です。RMVPE ONNX・原本の音量処理を使用します。");
             if device_rate == 44100 {
-                ui.weak("44.1kHzは原本との有声判定差が未解決です。約50msはchunk 17です。");
+                ui.weak("44.1kHzは原本との有声判定差が未解決です。");
             }
             if voice_quality_unverified {
                 ui.weak("32k/48k声モデルは構造のみ検証済みで、実声音質は未確認です。");
@@ -524,11 +532,14 @@ impl App {
         ui.heading("性能");
         if native {
             egui::Grid::new("native_perf").num_columns(2).show(ui, |ui| {
-                ui.label("Chunk（128 samples）");
-                ui.add(egui::Slider::new(&mut s.native.chunk, 1..=256));
-                ui.end_row();
-                ui.label("実効ブロック長");
-                ui.label(format!("{:.3} ms / {} Hz", s.native.chunk as f64 * 128000.0 / device_rate as f64, device_rate));
+                ui.label("ブロック長（約）");
+                let chunk_ms = 128000.0 / device_rate as f64;
+                ui.add(egui::Slider::new(&mut s.native.chunk, 1..=256)
+                    .custom_formatter(move |chunk, _| format!("{:.0}", chunk * chunk_ms))
+                    .custom_parser(move |text| text.trim().parse::<f64>().ok()
+                        .filter(|ms| ms.is_finite())
+                        .map(|ms| (ms / chunk_ms).round().clamp(1.0, 256.0)))
+                    .suffix(" ms"));
                 ui.end_row();
                 ui.label("クロスフェード");
                 ui.add(egui::Slider::new(&mut s.native.crossfade_ms, 1.0..=1000.0).step_by(1.0).suffix(" ms"));
