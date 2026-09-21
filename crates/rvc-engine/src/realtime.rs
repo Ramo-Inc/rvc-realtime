@@ -91,10 +91,22 @@ struct Shared {
 
 impl Shared {
     fn fail(&self, text: String) {
-        if let Ok(mut t) = self.status_text.lock() {
-            *t = text;
+        // Hold the message lock until Error is published, so startup completion
+        // cannot interleave between the error message and its status.
+        let mut message = self.status_text.lock().ok();
+        if let Some(t) = message.as_mut() {
+            **t = text;
         }
         self.status.store(Status::Error as u8, Ordering::Relaxed);
+    }
+}
+
+fn publish_running(status: &AtomicU8, text: &Mutex<String>) {
+    let mut message = text.lock().ok();
+    if status.compare_exchange(Status::Loading as u8, Status::Running as u8, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
+        if let Some(text) = message.as_mut() {
+            **text = "running".into();
+        }
     }
 }
 
@@ -180,12 +192,9 @@ impl Realtime {
         let s = shared.clone();
         let loader = std::thread::spawn(move || match load(conversion, &devices, &opts, &s) {
             Ok(running) => {
-                if let Ok(mut t) = s.status_text.lock() {
-                    *t = "running".into();
-                }
                 s.last_callback_ms.store(s.epoch.elapsed().as_millis() as u64, Ordering::Relaxed);
                 // A callback may already have failed during Pa_StartStream.
-                let _ = s.status.compare_exchange(Status::Loading as u8, Status::Running as u8, Ordering::Relaxed, Ordering::Relaxed);
+                publish_running(&s.status, &s.status_text);
                 Some(running)
             }
             Err(e) => {
@@ -438,4 +447,28 @@ unsafe extern "C" fn monitor_callback(_input: *const c_void, output: *mut c_void
         frame.fill(*v);
     }
     PA_CONTINUE
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn startup_completion_preserves_callback_error() {
+        // Pa_StartStream may deliver a failed first callback before returning.
+        let status = AtomicU8::new(Status::Error as u8);
+        let text = Mutex::new("inference: first callback failed".to_string());
+        publish_running(&status, &text);
+        assert_eq!(status.load(Ordering::Relaxed), Status::Error as u8);
+        assert_eq!(*text.lock().unwrap(), "inference: first callback failed");
+    }
+
+    #[test]
+    fn successful_startup_publishes_running() {
+        let status = AtomicU8::new(Status::Loading as u8);
+        let text = Mutex::new("loading".to_string());
+        publish_running(&status, &text);
+        assert_eq!(status.load(Ordering::Relaxed), Status::Running as u8);
+        assert_eq!(*text.lock().unwrap(), "running");
+    }
 }

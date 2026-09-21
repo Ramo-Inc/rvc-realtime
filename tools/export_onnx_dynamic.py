@@ -18,7 +18,7 @@ slicing, GeneratorNSF n_res branches (always interpolate; same-size linear resiz
 MultiHeadAttention relative-position helpers (max()/int() on the length).
 
 Usage:
-  uv run --project tools python tools/export_onnx_dynamic.py [--check]
+  uv run --project PoC/tools python PoC/tools/export_onnx_dynamic.py [--check]
 """
 import argparse
 import json
@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from export_onnx import POC, export, fcpe_mag, ort_session, rmvpe_mag, snr_db  # noqa: E402
 from official_dims import OfficialDims  # noqa: E402
 
-OUT = POC / "assets" / "onnx-dynamic"
+OUT = POC / "assets" / "onnx-dynamic" / "model11"
 
 # (sample rate, block, crossfade, extra, formant): trace shapes first, then check sets covering range ends
 TRACE = (48000, 130, 80, 2000, -0.2)

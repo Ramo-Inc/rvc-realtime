@@ -1,4 +1,4 @@
-//! Startup configuration: the voice model's `model.json` from `tools/export_onnx_dynamic.py`
+//! Startup configuration (trial 02): the voice model's `model.json` from `PoC/tools/export_onnx_dynamic.py`
 //! plus the realtime parameters the official VST exposes. Buffer dimensions are computed here with the
 //! official expressions (`RVCStreamEngine.__init__`, `rtrvc.RVC.infer`, `SynthesizerTrnMs256NSFsid.infer`,
 //! HuBERT conv lengths); `tests/dims_fixture.rs` checks them against the official engine.

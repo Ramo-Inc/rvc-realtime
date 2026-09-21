@@ -1,9 +1,9 @@
 """Download NVIDIA runtime wheels from PyPI and extract their Windows DLLs into a runtime directory.
 
 ort 2.0.0-rc.13 ships ONNX Runtime 1.28 built for CUDA 13 + cuDNN 9 (ort-sys dist.tsv), so the
-Rust engine needs these DLLs next to the executable (or on PATH).
+Rust PoC needs these DLLs next to the executable (or on PATH).
 
-Usage: uv run --project tools python tools/fetch_runtime.py --out assets/runtime [--tensorrt]
+Usage: uv run --project PoC/tools python PoC/tools/fetch_runtime.py --out PoC/01-rust-ort-official-rt/runtime [--tensorrt]
 
 --tensorrt adds TensorRT 10.16 (cu13) from pypi.nvidia.com: ORT 1.28's TensorRT EP links nvinfer_10.dll.
 """

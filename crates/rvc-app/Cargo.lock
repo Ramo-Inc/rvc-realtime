@@ -2466,7 +2466,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rvc-app"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "eframe",
  "rfd",
@@ -2489,8 +2489,10 @@ dependencies = [
  "ort",
  "rand",
  "rand_distr",
+ "realfft",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

@@ -4,8 +4,8 @@ Dimensions are read from an instantiated official RVCStreamEngine (not re-derive
 shapes and the Rust engine follow exactly the buffers the official realtime path uses.
 
 Usage:
-  uv run --project tools python tools/export_onnx.py --config tools/configs/base.json [--check] \
-      [--dsp-fixture crates/rvc-engine/tests/fixtures/dsp.json] [--fcpe-fp16]
+  uv run --project PoC/tools python PoC/tools/export_onnx.py --config PoC/configs/base.json [--check] \
+      [--dsp-fixture PoC/01-rust-ort-official-rt/tests/fixtures/dsp.json] [--fcpe-fp16]
 """
 import argparse
 import importlib.util
@@ -19,7 +19,7 @@ import numpy as np
 
 POC = Path(__file__).resolve().parents[1]
 RVC_ROOT = POC / "assets" / "official" / "rvc"
-MODEL_PTH = POC / "assets" / "app" / "voices" / "default_v2_40k.pth"
+MODEL_PTH = POC / "assets" / "model" / "model11.pth"
 OPSET = 17
 
 

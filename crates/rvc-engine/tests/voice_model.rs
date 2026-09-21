@@ -1,5 +1,5 @@
 //! Voice model conversion against the weights torch writes for the same model
-//! (`tools/export_generator_template.py`, reference/40k from the default voice).
+//! (`PoC/tools/export_generator_template.py`, reference/40k from model 11).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -8,18 +8,18 @@ use half::f16;
 use rvc_engine::voice_model::{self, Unsupported};
 use rvc_engine::Error;
 
-fn assets(rel: &str) -> PathBuf {
-    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/")).join(rel)
+fn poc(rel: &str) -> PathBuf {
+    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../PoC/")).join(rel)
 }
 
 #[test]
 fn converts_like_official_load() {
-    let app = assets("app");
-    let reference = std::fs::read(app.join("reference/40k/generator.weights")).unwrap();
-    let template: serde_json::Value = serde_json::from_slice(&std::fs::read(app.join("templates/40k/template.json")).unwrap()).unwrap();
-    for (name, src) in [("pth", "app/voices/default_v2_40k.pth")] {
+    let assets = poc("assets/app");
+    let reference = std::fs::read(assets.join("reference/40k/generator.weights")).unwrap();
+    let template: serde_json::Value = serde_json::from_slice(&std::fs::read(assets.join("templates/40k/template.json")).unwrap()).unwrap();
+    for (name, src) in [("safetensors", "assets/model/F_Guinaifen_570e_74100s.safetensors"), ("pth", "assets/model/model11.pth")] {
         let out = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/target/voice-model-test")).join(name);
-        voice_model::convert(&assets(src), &app, &out).unwrap();
+        voice_model::convert(&poc(src), &assets, &out).unwrap();
         let got = std::fs::read(out.join("generator.weights")).unwrap();
         assert_eq!(got.len(), reference.len(), "{name}");
         // weight-norm weights: the reference computes the norm on the GPU, so allow one fp16 step
@@ -44,5 +44,5 @@ fn converts_like_official_load() {
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect();
     safetensors::serialize_to_file([("x", view)], Some(meta), &v1).unwrap();
-    assert!(matches!(voice_model::check(&v1, &app), Err(Error::Unsupported(Unsupported::Version(_)))));
+    assert!(matches!(voice_model::check(&v1, &assets), Err(Error::Unsupported(Unsupported::Version(_)))));
 }

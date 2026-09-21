@@ -14,7 +14,7 @@ trial 2 shape-agnostic generator graph with every voice model weight moved to ex
 Weights follow the official load (rtrvc.get_synthesizer): fp32, remove_weight_norm, then half.
 
 Usage:
-  uv run --project tools python tools/export_generator_template.py --out assets/app --model assets/app/voices/default_v2_40k.pth [--check]
+  uv run --project PoC/tools python PoC/tools/export_generator_template.py --out PoC/assets/app --model PoC/assets/model/model11.pth [--check]
 """
 import argparse
 import json

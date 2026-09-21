@@ -808,14 +808,17 @@ dependencies = [
  "ort",
  "rand",
  "rand_distr",
+ "realfft",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
 name = "rvc-engine"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "half",
  "hound",

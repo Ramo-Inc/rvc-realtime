@@ -1,4 +1,4 @@
-//! Converts a WAV block by block through `Engine`.
+//! Converts a WAV block by block through `Engine` (same block handling as the PoC `rvc-poc wav`).
 
 use std::path::PathBuf;
 
@@ -7,9 +7,9 @@ use rvc_engine::{Engine, EngineOptions, F0Method, F0Window, Model, Params, Start
 
 #[derive(Parser)]
 struct Args {
-    #[arg(long, default_value = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/onnx-dynamic"))]
+    #[arg(long, default_value = concat!(env!("CARGO_MANIFEST_DIR"), "/../../PoC/assets/onnx-dynamic/model11"))]
     model_dir: PathBuf,
-    #[arg(long, default_value = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/runtime"))]
+    #[arg(long, default_value = concat!(env!("CARGO_MANIFEST_DIR"), "/../../PoC/01-rust-ort-official-rt/runtime"))]
     runtime_dir: PathBuf,
     #[arg(long, default_value_t = 60.0)]
     block_ms: f64,

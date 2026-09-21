@@ -16,9 +16,26 @@ use std::{
 
 pub const KIND: &str = "deiteris-onnx-v1";
 
+pub(crate) fn validate_model(template: &Path, model: &Path, rate: usize) -> Result<()> {
+    let metadata: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(model.join("model.json"))?)?;
+    ensure!(
+        metadata["generator_kind"] == KIND,
+        "requires converted {KIND} model"
+    );
+    ensure!(
+        matches!(rate, 32000 | 40000 | 48000)
+            && metadata["model_sr"].as_u64() == Some(rate as u64)
+            && metadata["inter_channels"] == 192
+            && metadata["half"] == true,
+        "incompatible generator model"
+    );
+    ensure!(template.is_file(), "missing generator graph");
+    Ok(())
+}
+
 fn valid_lengths(frames: usize, skip: usize, ret: usize, formant: usize) -> bool {
     frames <= 100000
-        && skip > 0
         && frames > skip
         && ret == frames - skip
         && (1..=100000).contains(&formant)
@@ -40,6 +57,7 @@ impl Cuda {
         }
     }
     fn copy(&self, dst: *mut c_void, src: *const c_void, bytes: usize, kind: i32) -> Result<()> {
+        if bytes == 0 { return Ok(()); }
         let status = unsafe { (self.memcpy)(dst, src, bytes, kind) };
         ensure!(status == 0, "generator cudaMemcpy failed: {status}");
         Ok(())
@@ -62,7 +80,7 @@ impl Runner {
         let flow_head = skip.saturating_sub(24);
         let dec_head = skip - flow_head;
         ensure!(
-            frames > skip && ret == frames - skip && dec_head > 0 && formant > 0,
+            frames > skip && ret == frames - skip && formant > 0,
             "invalid generator dimensions"
         );
         let upp = rate / 100;
@@ -168,20 +186,7 @@ impl Generator {
         Self::new_with_graph(template, model, rate, true)
     }
     pub fn new_with_graph(template: &Path, model: &Path, rate: usize, graph: bool) -> Result<Self> {
-        let metadata: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(model.join("model.json"))?)?;
-        ensure!(
-            metadata["generator_kind"] == KIND,
-            "requires converted {KIND} model"
-        );
-        ensure!(
-            matches!(rate, 32000 | 40000 | 48000)
-                && metadata["model_sr"].as_u64() == Some(rate as u64)
-                && metadata["inter_channels"] == 192
-                && metadata["half"] == true,
-            "incompatible generator model"
-        );
-        ensure!(template.is_file(), "missing generator graph");
+        validate_model(template, model, rate)?;
         Ok(Self {
             path: template.into(),
             rate,
@@ -304,7 +309,7 @@ mod tests {
         assert!(valid_lengths(7, 5, 2, 3));
         assert!(valid_lengths(67, 50, 17, 17));
         assert!(!valid_lengths(7, 8, 1, 1));
-        assert!(!valid_lengths(7, 0, 7, 1));
+        assert!(valid_lengths(7, 0, 7, 1));
         assert!(!valid_lengths(67, 50, 18, 17));
         assert!(!valid_lengths(67, 50, 17, usize::MAX));
     }

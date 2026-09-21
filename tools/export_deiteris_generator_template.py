@@ -1,6 +1,6 @@
 """Dynamic Deiteris ONNX generator templates; Python/Torch are export-time only.
 
-uv run --project tools python tools/export_deiteris_generator_template.py --out assets/app/deiteris
+uv run --project PoC/tools python PoC/tools/export_deiteris_generator_template.py --out PoC/assets/app/deiteris
 
 Uses pinned upstream modules unchanged on disk. Shape-only export substitutions
 remove Python int/branch specialization. FP16 scalar opmath follows the verified
@@ -17,8 +17,8 @@ import torch
 import torch.nn.functional as F
 from torch.onnx import symbolic_helper, symbolic_opset9
 
-ROOT = Path(__file__).resolve().parents[1]
-UPSTREAM = ROOT / 'assets/official/deiteris'
+ROOT = Path(__file__).resolve().parents[2]
+UPSTREAM = ROOT / 'PoC/assets/research-20260919/deiteris'
 sys.path.insert(0, str(UPSTREAM / 'server'))
 from voice_changer.RVC.inferencer.rvc_models.infer_pack import attentions
 from voice_changer.RVC.inferencer.rvc_models.infer_pack.models import SynthesizerTrnMs768NSFsid
@@ -113,7 +113,7 @@ class Generator(torch.nn.Module):
 
 
 def export(rate, destination):
-    template = json.loads((ROOT / f'assets/app/templates/{rate}/template.json').read_text())
+    template = json.loads((ROOT / f'PoC/assets/app/templates/{rate}/template.json').read_text())
     config = list(template['config'])
     config[15] = 1
     torch.manual_seed(731)
@@ -184,8 +184,8 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--only', choices=['32k', '40k', '48k'])
     args = parser.parse_args()
-    if not (UPSTREAM / 'server/voice_changer/RVC/inferencer/rvc_models/infer_pack/models.py').is_file():
-        parser.error('clone https://github.com/deiteris/voice-changer into assets/official/deiteris first')
+    from deiteris_reference import _verify_upstream
+    _verify_upstream(UPSTREAM)
     patch_attention()
     torch.onnx.register_custom_op_symbolic('aten::mul', half_mul, 18)
     torch.onnx.register_custom_op_symbolic('aten::div', half_div, 18)

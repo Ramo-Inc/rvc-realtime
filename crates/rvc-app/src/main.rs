@@ -37,7 +37,7 @@ const APP_VARIANT: Variant = Variant { f0_interp: false, rmvpe_threshold: 0.05, 
 fn main() -> eframe::Result {
     // each window's size follows its content every frame (main window; options in its own window)
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_title("RVC リアルタイム変換").with_inner_size([300.0, 80.0])
+        viewport: egui::ViewportBuilder::default().with_title(concat!("RVC リアルタイム変換 v", env!("CARGO_PKG_VERSION"), "-alpha")).with_inner_size([300.0, 80.0])
             .with_resizable(false)
             .with_maximize_button(false)
             .with_icon(Arc::new(egui::IconData::default())),
@@ -198,8 +198,11 @@ impl App {
         }
         if s.backend == Backend::Deiteris {
             let startup = self.native_startup();
-            if let Err(e) = startup.dims(40000) { return Some(format!("Deiteris の設定: {e}")); }
-            for file in ["pre.onnx", "prepare.onnx", "post.onnx", "contentvec.onnx", "rmvpe.onnx"] {
+            if let Err(e) = startup.tg_dims(40000) { return Some(format!("Deiteris の設定: {e}")); }
+            for file in ["tg-fast-v1/audio-contract.json", "tg-fast-v1/contentvec.onnx", "tg-fast-v1/post.onnx",
+                "tg-fast-v1/rmvpe-salience.onnx", "tg-fast-v1/hann.f32", "tg-fast-v1/mel-basis.f32",
+                "tg-gpu-pitch-v2/contract.json", "tg-gpu-pitch-v2/frame.onnx", "tg-gpu-pitch-v2/mel.onnx",
+                "tg-gpu-pitch-v2/rmvpe-salience.onnx", "tg-gpu-pitch-v2/decode.onnx"] {
                 if !self.assets_dir.join("deiteris").join(file).is_file() {
                     return Some(format!("Deiteris の資産がありません: {file}"));
                 }
@@ -244,6 +247,7 @@ impl App {
             .and_then(|d| d.inputs.iter().find(|d| d.name == s.input)).map_or(48000, |d| d.default_sample_rate);
         rvc_engine::DeiterisStartup {
             sample_rate: sample_rate as usize, chunk: s.native.chunk,
+            block_frames: None,
             extra_ms: s.native.extra_ms, crossfade_ms: s.native.crossfade_ms,
             formant: s.voice_model.as_ref().and_then(|p| s.voices.get(p)).map_or(0.0, |v| v.formant),
         }
@@ -476,7 +480,6 @@ impl App {
         });
         let native = s.backend == Backend::Deiteris;
         if native {
-            ui.colored_label(ui.visuals().warn_fg_color, "50ms動作の安定性は評価中です。RMVPE ONNX・原本の音量処理を使用します。");
             if device_rate == 44100 {
                 ui.weak("44.1kHzは原本との有声判定差が未解決です。");
             }

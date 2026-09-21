@@ -7,7 +7,7 @@
 - formant: return_length2 for every formant step -12.00..12.00 (0.01) and every return_length seen in the
   sweeps, and upp_res per formant step
 
-Usage: uv run --project tools python tools/make_dims_fixture.py --out crates/rvc-engine/tests/fixtures/dims.json
+Usage: uv run --project PoC/tools python PoC/tools/make_dims_fixture.py --out PoC/02-rust-ort-dynamic-shape/tests/fixtures/dims.json
 """
 import argparse
 import json

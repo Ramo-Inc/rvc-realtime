@@ -1,5 +1,5 @@
 //! dsp ports vs values produced by the originals (torchaudio Resample, librosa rms, torch interpolate,
-//! torch.stft magnitudes) — fixture written by `tools/export_onnx.py --dsp-fixture`.
+//! torch.stft magnitudes) — fixture written by `PoC/tools/export_onnx.py --dsp-fixture`.
 
 use rvc_engine::dsp;
 use serde_json::Value;

@@ -7,6 +7,7 @@ description = "Realtime RVC voice conversion engine (official RVC 2.3.260718 rea
 
 [features]
 deiteris = ["dep:rvc-deiteris"]
+quality-evaluation = ["deiteris", "rvc-deiteris/evaluation"]
 
 [dependencies]
 rvc-deiteris = { path = "../rvc-deiteris", features = ["onnx"], optional = true }
@@ -26,8 +27,17 @@ safetensors = "0.6"
 zip = { version = "2", default-features = false }
 
 [dev-dependencies]
+anyhow = "1"
 clap = { version = "4.5", features = ["derive"] }
 hound = "3.5"
+
+[[example]]
+name = "input_continuity"
+required-features = ["quality-evaluation"]
+
+[[example]]
+name = "onset_trace"
+required-features = ["quality-evaluation"]
 
 [profile.release]
 debug = false
@@ -43,3 +53,11 @@ required-features = ["deiteris"]
 [[example]]
 name = "debug_latency"
 required-features = ["deiteris"]
+
+[[example]]
+name = "tg_stages"
+required-features = ["deiteris"]
+
+[[example]]
+name = "tg_full_gpu"
+required-features = ["quality-evaluation"]

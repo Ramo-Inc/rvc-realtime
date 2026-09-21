@@ -26,7 +26,7 @@ pub struct Params {
     pub pitch: f64,
     pub threshold_db: f64,
 }
-type Values = BTreeMap<String, DynValue>;
+pub(crate) type Values = BTreeMap<String, DynValue>;
 pub struct Engine {
     startup: Startup,
     dims: Dims,
@@ -42,7 +42,7 @@ pub struct Engine {
     output: Vec<f32>,
     failed: bool,
 }
-fn session(path: &Path, cuda: bool) -> Result<Session> {
+pub(crate) fn session(path: &Path, cuda: bool) -> Result<Session> {
     let provider = if cuda {
         ep::CUDA::default().build()
     } else {
@@ -57,7 +57,7 @@ fn session(path: &Path, cuda: bool) -> Result<Session> {
         .map_err(|e| anyhow::anyhow!(e.to_string()))?
         .commit_from_file(path)?)
 }
-fn run(session: &mut Session, values: &Values) -> Result<Values> {
+pub(crate) fn run(session: &mut Session, values: &Values) -> Result<Values> {
     let ports = session
         .inputs()
         .iter()
@@ -82,16 +82,16 @@ fn run(session: &mut Session, values: &Values) -> Result<Values> {
         .map(|(k, v)| (k.to_owned(), v))
         .collect())
 }
-fn i64s(shape: &[usize], values: Vec<i64>) -> Result<DynValue> {
+pub(crate) fn i64s(shape: &[usize], values: Vec<i64>) -> Result<DynValue> {
     Ok(Tensor::from_array((shape.to_vec(), values))?.into_dyn())
 }
-fn floats(shape: &[usize], values: Vec<f32>) -> Result<DynValue> {
+pub(crate) fn floats(shape: &[usize], values: Vec<f32>) -> Result<DynValue> {
     Ok(Tensor::from_array((shape.to_vec(), values))?.into_dyn())
 }
 fn half_zeros(count: usize) -> Result<DynValue> {
     Ok(Tensor::from_array(([count], vec![f16::ZERO; count]))?.into_dyn())
 }
-fn put_resample(
+pub(crate) fn put_resample(
     values: &mut Values,
     prefix: &str,
     r: ResampleInputs,

@@ -26,9 +26,9 @@ struct Args {
     exclusive: bool,
     #[arg(long, default_value_t = 48000)]
     sample_rate: u32,
-    #[arg(long, default_value = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/onnx-dynamic"))]
+    #[arg(long, default_value = concat!(env!("CARGO_MANIFEST_DIR"), "/../../PoC/assets/onnx-dynamic/model11"))]
     model_dir: PathBuf,
-    #[arg(long, default_value = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/runtime"))]
+    #[arg(long, default_value = concat!(env!("CARGO_MANIFEST_DIR"), "/../../PoC/01-rust-ort-official-rt/runtime"))]
     runtime_dir: PathBuf,
     #[arg(long, default_value_t = 60.0)]
     block_ms: f64,

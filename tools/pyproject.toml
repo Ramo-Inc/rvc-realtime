@@ -1,7 +1,7 @@
 [project]
 name = "rvc-poc-tools"
 version = "0.1.0"
-description = "Dev tools: ONNX export from the official RVC code, runtime DLL download, test fixtures"
+description = "PoC tools: official RVC reference runner, ONNX export, voice quality report"
 requires-python = ">=3.12,<3.13"
 # Versions follow the official RVC 2.3.260718 requirments_cu128_py312.txt
 dependencies = [
@@ -20,6 +20,15 @@ dependencies = [
     "onnx>=1.17,<1.19",
     "onnxruntime-gpu>=1.19.2,<1.20",
     "onnxslim>=0.1.96",
+]
+
+[dependency-groups]
+# Only for importing the pinned Deiteris reference and exporting its graphs; never shipped.
+deiteris = [
+    "xxhash==4.0.1",
+    "pydantic-settings==2.15.0",
+    "onnxsim==0.7.3",
+    "torchcrepe==0.0.24",
 ]
 
 [tool.uv]

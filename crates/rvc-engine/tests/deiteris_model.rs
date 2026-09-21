@@ -5,8 +5,8 @@ use std::path::PathBuf;
 #[test]
 fn concurrent_first_conversion_keeps_published_cache() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let voice = root.join("assets/app/voices/default_v2_40k.pth");
-    let assets = root.join("assets/app/deiteris");
+    let voice = root.join("PoC/assets/model/F_Guinaifen_570e_74100s.safetensors");
+    let assets = root.join("PoC/assets/app/deiteris");
     let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
     let cache = root.join(format!("target/deiteris-concurrent-{}-{nonce}", std::process::id()));
     let barrier = std::sync::Barrier::new(2);
@@ -32,8 +32,8 @@ fn concurrent_first_conversion_keeps_published_cache() {
 #[test]
 fn deiteris_cache_is_distinct_and_preserves_model_weights() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let voice = root.join("assets/app/voices/default_v2_40k.pth");
-    let assets = root.join("assets/app");
+    let voice = root.join("PoC/assets/model/F_Guinaifen_570e_74100s.safetensors");
+    let assets = root.join("PoC/assets/app");
     let cache = root.join("target/deiteris-model-test");
     let first = voice_model::prepare_deiteris(&voice, &assets.join("deiteris"), &cache).unwrap();
     let second = voice_model::prepare_deiteris(&voice, &assets.join("deiteris"), &cache).unwrap();

@@ -1,6 +1,6 @@
 [package]
 name = "rvc-app"
-version = "0.1.9"
+version = "0.1.10"
 edition = "2021"
 publish = false
 description = "Windows app for realtime RVC voice conversion on rvc-engine"

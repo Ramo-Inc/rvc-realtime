@@ -1,7 +1,7 @@
 //! Voice model conversion without Python: an RVC v2 F0 model (`.pth` as the official training saves it, or
 //! `.safetensors` with the config in its metadata) becomes a model directory the engine opens.
 //!
-//! Only the generator depends on the voice model. `tools/export_generator_template.py` writes one generator
+//! Only the generator depends on the voice model. `PoC/tools/export_generator_template.py` writes one generator
 //! graph per official training config with every weight in external data (`generator.weights`); conversion
 //! checks the model against a template and writes its weights at the template's offsets, loaded like the
 //! official `rtrvc.get_synthesizer` (fp32, `remove_weight_norm`, then half).

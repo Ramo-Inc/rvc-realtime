@@ -1,5 +1,5 @@
 //! `Dims::compute` vs the official engine: every block / crossfade / extra step per sample rate, a mixed grid,
-//! and every formant step for every return_length — fixture written by `tools/make_dims_fixture.py`.
+//! and every formant step for every return_length — fixture written by `PoC/tools/make_dims_fixture.py`.
 
 use rvc_engine::config::{self, Dims, F0Method, Model, ModelFiles, Startup};
 use serde_json::Value;

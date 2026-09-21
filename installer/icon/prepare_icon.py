@@ -4,7 +4,7 @@ seed 8507, 1024x1024 on a white background) into the app icon files.
 The tile sits at (172, 174)-(851, 847) with a corner radius of about 150 px; everything outside that rounded
 square (white background, drop shadow) becomes transparent.
 
-Usage: uv run --project tools python installer/icon/prepare_icon.py
+Usage: uv run --project PoC/tools python installer/icon/prepare_icon.py
 Writes rvc-app.png (1024 px, transparent corners) and rvc-app.ico (16-256 px) next to this script.
 """
 from pathlib import Path

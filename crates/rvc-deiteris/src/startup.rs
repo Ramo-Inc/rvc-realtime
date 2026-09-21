@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 pub struct Startup {
     pub sample_rate: usize,
     pub chunk: usize,
+    /// Resolved device frames for unit-tagged settings; None preserves old chunk*128.
+    #[serde(default)]
+    pub block_frames: Option<usize>,
     pub extra_ms: f64,
     pub crossfade_ms: f64,
     pub formant: f64,
@@ -30,6 +33,12 @@ pub struct Dims {
 
 impl Startup {
     pub fn dims(&self, model_rate: usize) -> Result<Dims> {
+        self.compute(model_rate, false)
+    }
+    pub fn tg_dims(&self, model_rate: usize) -> Result<Dims> {
+        self.compute(model_rate, true)
+    }
+    fn compute(&self, model_rate: usize, tg: bool) -> Result<Dims> {
         ensure!(
             matches!(self.sample_rate, 44100 | 48000),
             "unsupported device rate"
@@ -43,7 +52,7 @@ impl Startup {
             "chunk out of supported range"
         );
         ensure!(
-            self.extra_ms.is_finite() && (50.0..=5000.0).contains(&self.extra_ms),
+            self.extra_ms.is_finite() && ((if tg { 0.0 } else { 50.0 })..=5000.0).contains(&self.extra_ms),
             "invalid extra context"
         );
         ensure!(
@@ -54,16 +63,25 @@ impl Startup {
             self.formant.is_finite() && (-12.0..=12.0).contains(&self.formant),
             "invalid formant"
         );
-        let block = self.chunk * 128;
+        let block = self.block_frames.unwrap_or(self.chunk * 128);
+        ensure!((128..=32768).contains(&block), "invalid resolved block frames");
         let crossfade = (self.crossfade_ms / 1000.0 * self.sample_rate as f64) as usize;
         let extra = (self.extra_ms / 1000.0 * self.sample_rate as f64) as usize;
         let search = self.sample_rate / 100;
         let to16 = |n: usize| (n as f64 / self.sample_rate as f64 * 16000.0) as usize;
-        let convert =
+        let mut convert =
             (to16(block) + to16(crossfade) + to16(extra) + to16(search)).div_ceil(160) * 160;
+        let mut skip = to16(extra) / 160;
+        let ret = convert / 160 - skip;
+        let mut silence_front = to16(extra).saturating_sub(800);
+        if tg {
+            if convert < 3040 {
+                skip += (3040 - convert) / 160;
+                convert = 3040;
+            }
+            silence_front = silence_front.min(convert - 3040);
+        }
         let features = convert / 160;
-        let skip = to16(extra) / 160;
-        let ret = features - skip;
         let window = model_rate / 100;
         let factor = 2.0f64.powf(self.formant / 12.0);
         let formant_length = (ret as f64 * factor).ceil() as usize;
@@ -81,7 +99,7 @@ impl Startup {
             audio: to16(block) + to16(crossfade),
             convert,
             features,
-            silence_front: to16(extra) - 800,
+            silence_front,
             skip,
             ret,
             formant_length,

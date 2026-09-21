@@ -21,8 +21,8 @@ struct Args {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let a = Args::parse();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let assets = root.join("assets/app");
-    let runtime = root.join("assets/runtime");
+    let assets = root.join("PoC/assets/app");
+    let runtime = root.join("PoC/01-rust-ort-official-rt/runtime");
     let dir = root.join("target/debug-latency");
     std::fs::create_dir_all(&dir)?;
     let report = dir.join(format!("{}.json", a.label));
@@ -34,6 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let options = EngineOptions { runtime_dir: runtime.clone(), seed: 7 };
     let params = Params { pitch:14.0, threshold_db:-83.0, rms_mix:0.5, skip_silence:false, drop_silent_context:false };
     let startup = rvc_engine::DeiterisStartup { sample_rate:spec.sample_rate as usize, chunk:a.chunk,
+        block_frames: None,
         extra_ms:a.extra_ms, crossfade_ms:a.crossfade_ms, formant:-0.2 };
     let mut product = None;
     let mut direct = None;
